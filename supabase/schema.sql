@@ -27,6 +27,8 @@ create table if not exists funnel_steps (
   question_type text check (question_type in ('single_select', 'multi_select', 'input')),
   title text not null,
   description text,
+  image_url text,
+  question_image_url text,
   required boolean not null default false,
   input_config jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -41,6 +43,7 @@ create table if not exists answer_options (
   value text not null,
   label text not null,
   description text,
+  icon_url text,
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   unique (step_id, value)
@@ -60,6 +63,10 @@ create table if not exists assessment_sessions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table funnel_steps add column if not exists image_url text;
+alter table funnel_steps add column if not exists question_image_url text;
+alter table answer_options add column if not exists icon_url text;
 
 create table if not exists assessment_answers (
   id uuid primary key default gen_random_uuid(),

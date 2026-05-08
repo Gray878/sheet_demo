@@ -42,6 +42,8 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 服务端写操作使用 `SUPABASE_SERVICE_ROLE_KEY`，前端不会直接写库。
 
+更完整的部署步骤见 `docs/deployment.md`。
+
 ## API
 
 所有 API 使用统一响应结构：
@@ -119,10 +121,17 @@ npm run typecheck
 npm test
 ```
 
+部署后创建评审用测试 session：
+
+```bash
+APP_URL=https://your-vercel-domain.vercel.app PAID=true npm run demo:session
+```
+
 ## 交付说明
 
 - 数据库 schema：`supabase/schema.sql`
 - API 细节：`docs/api.md`
+- Supabase/Vercel 部署：`docs/deployment.md`
 - AI 使用复盘草稿：`docs/ai-retrospective.md`
 - 原始需求与排期：`docs/`
 - BetterMe 公开数据抓取结果：`scrape/betterme_scrape/`

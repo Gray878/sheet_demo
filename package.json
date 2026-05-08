@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "seed:supabase": "node scripts/seed-supabase.mjs"
+    "seed:supabase": "node scripts/seed-supabase.mjs",
+    "demo:session": "node scripts/create-demo-session.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

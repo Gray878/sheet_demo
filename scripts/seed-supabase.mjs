@@ -8,7 +8,6 @@ if (!url || !serviceRoleKey) {
   throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
 }
 
-const selectedIndexes = new Set([0, 1, 2, 7, 8, 14, 17, 20, 24, 25, 27, 28, 29, 30, 32]);
 const supabase = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
 const raw = JSON.parse(await readFile("scrape/betterme_scrape/betterme_public_data.json", "utf8"));
 
@@ -74,9 +73,10 @@ const coreQuestionKeys = new Set([
   "activityFrequency"
 ]);
 
-const scrapedSteps = raw.quiz.steps
-  .filter((step) => selectedIndexes.has(step.index))
-  .map((step, index) => ({ ...step, mappedIndex: index >= 1 ? index + 1 : index }));
+const scrapedSteps = raw.quiz.steps.map((step, index) => ({
+  ...step,
+  mappedIndex: index >= 1 ? index + 1 : index
+}));
 
 const steps = [
   scrapedSteps[0],
@@ -87,10 +87,12 @@ const steps = [
     description: "This helps calibrate calorie guidance without creating an account.",
     questionType: "single_select",
     questionKey: "gender",
+    imageUrl: null,
+    questionImageUrl: null,
     answers: [
-      { id: "gender_female", title: "Female", value: "female", order: 0 },
-      { id: "gender_male", title: "Male", value: "male", order: 1 },
-      { id: "gender_other", title: "Another option", value: "other", order: 2 }
+      { id: "gender_female", title: "Female", value: "female", iconUrl: null, order: 0 },
+      { id: "gender_male", title: "Male", value: "male", iconUrl: null, order: 1 },
+      { id: "gender_other", title: "Another option", value: "other", iconUrl: null, order: 2 }
     ],
     mappedIndex: 1
   },
@@ -121,6 +123,8 @@ for (const step of steps) {
       question_type: isQuestion ? step.questionType : null,
       title: step.title ?? "Your plan is taking shape",
       description: step.description ?? null,
+      image_url: step.imageUrl ?? null,
+      question_image_url: step.questionImageUrl ?? null,
       required: questionKey ? coreQuestionKeys.has(questionKey) : false,
       input_config: questionKey ? inputConfig(questionKey) : {}
     },
@@ -139,6 +143,7 @@ for (const step of steps) {
           value: answer.value ?? optionValue(questionKey, label),
           label,
           description: answer.description ?? null,
+          icon_url: answer.iconUrl ?? null,
           sort_order: answer.order ?? optionIndex
         },
         { onConflict: "id" }
