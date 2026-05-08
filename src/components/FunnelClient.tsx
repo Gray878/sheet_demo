@@ -312,6 +312,12 @@ export function FunnelClient() {
           <h1>{step.title}</h1>
           {step.description ? <p className="lede">{step.description}</p> : null}
 
+          {step.questionImageUrl || step.imageUrl ? (
+            <div className="bm-question-image">
+              <img alt="" src={step.questionImageUrl ?? step.imageUrl ?? ""} />
+            </div>
+          ) : null}
+
           {step.type === "info" ? (
             <div className="bm-info-strip">
               <span>Low-impact training</span>
@@ -347,6 +353,11 @@ export function FunnelClient() {
                     }}
                     type="button"
                   >
+                    {option.iconUrl ? (
+                      <span className="bm-option-icon">
+                        <img alt="" src={option.iconUrl} />
+                      </span>
+                    ) : null}
                     <span>{option.label}</span>
                     {selected ? <Check size={18} aria-hidden="true" /> : null}
                   </button>

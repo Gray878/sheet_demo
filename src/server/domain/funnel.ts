@@ -9,17 +9,18 @@ type ScrapedStep = {
   description?: string | null;
   questionId?: number;
   questionType?: AnswerType;
+  imageUrl?: string | null;
+  questionImageUrl?: string | null;
   contentKey?: string | null;
   customizationKey?: string | null;
   answers?: Array<{
     id: number;
     title?: string | null;
     description?: string | null;
+    iconUrl?: string | null;
     order?: number;
   }>;
 };
-
-const selectedScrapedIndexes = new Set([0, 1, 2, 7, 8, 14, 17, 20, 24, 25, 27, 28, 29, 30, 32]);
 
 const coreQuestionKeys = new Set([
   "gender",
@@ -86,6 +87,7 @@ function optionsFor(step: ScrapedStep, questionKey: string): FunnelOption[] {
       value: optionValue(questionKey, label),
       label,
       description: answer.description ?? null,
+      iconUrl: answer.iconUrl ?? null,
       sortOrder: answer.order ?? index
     };
   });
@@ -114,6 +116,8 @@ function mapScrapedStep(step: ScrapedStep, stepIndex: number): FunnelStep {
       type: step.type === "LOADER" ? "loader" : "info",
       title: step.title ?? "Your plan is taking shape",
       description: step.description ?? null,
+      imageUrl: step.imageUrl ?? null,
+      questionImageUrl: null,
       required: false,
       options: []
     };
@@ -129,6 +133,8 @@ function mapScrapedStep(step: ScrapedStep, stepIndex: number): FunnelStep {
     type: "question",
     title: step.title ?? "Tell us a little more",
     description: step.description ?? null,
+    imageUrl: step.imageUrl ?? null,
+    questionImageUrl: step.questionImageUrl ?? null,
     questionKey,
     questionType,
     required: coreQuestionKeys.has(questionKey),
@@ -143,6 +149,8 @@ const genderStep: FunnelStep = {
   type: "question",
   title: "Which option best describes you?",
   description: "This helps calibrate calorie guidance without creating an account.",
+  imageUrl: null,
+  questionImageUrl: null,
   questionKey: "gender",
   questionType: "single_select",
   required: true,
@@ -155,7 +163,6 @@ const genderStep: FunnelStep = {
 
 export function getDefaultFunnel(): Funnel {
   const scrapedSteps = (scrapedData.quiz.steps as ScrapedStep[])
-    .filter((step) => selectedScrapedIndexes.has(step.index))
     .map((step, index) => mapScrapedStep(step, index >= 1 ? index + 1 : index));
 
   const steps = [scrapedSteps[0], genderStep, ...scrapedSteps.slice(1)].map((step, index) => ({

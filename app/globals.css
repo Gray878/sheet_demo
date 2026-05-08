@@ -293,6 +293,25 @@ a {
   letter-spacing: -0.025em;
 }
 
+.bm-question-image {
+  width: min(340px, 100%);
+  height: 210px;
+  display: grid;
+  place-items: center;
+  margin: 22px auto 0;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #f4f5f8;
+}
+
+.bm-question-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  display: block;
+}
+
 .bm-info-strip {
   display: flex;
   flex-wrap: wrap;
@@ -324,8 +343,8 @@ a {
   min-height: 62px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-start;
+  gap: 14px;
   padding: 16px 18px;
   border: 1px solid #e3e5ee;
   border-radius: 10px;
@@ -336,6 +355,33 @@ a {
   font-weight: 700;
   text-align: left;
   box-shadow: 0 3px 0 rgba(79, 99, 177, 0.08);
+}
+
+.bm-option-button > span:nth-child(2),
+.bm-option-button > span:first-child:last-of-type {
+  flex: 1;
+}
+
+.bm-option-button svg {
+  flex: 0 0 auto;
+}
+
+.bm-option-icon {
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #f4f5f8;
+}
+
+.bm-option-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .bm-option-button:hover,

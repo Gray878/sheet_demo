@@ -10,6 +10,7 @@ export interface FunnelOption {
   value: string;
   label: string;
   description?: string | null;
+  iconUrl?: string | null;
   sortOrder: number;
 }
 
@@ -20,6 +21,8 @@ export interface FunnelStep {
   type: StepType;
   title: string;
   description?: string | null;
+  imageUrl?: string | null;
+  questionImageUrl?: string | null;
   questionKey?: string;
   questionType?: AnswerType;
   required: boolean;
