@@ -35,22 +35,22 @@ https://cdn.gandalfpuzzle.com/temp/funnel/<image-id>.webp
 
 1. 从 Supabase Project Settings -> Database -> Connection string 复制 Postgres URI。
 2. 在本地或 Vercel 配置 `DATABASE_URL`。
-3. 用 Drizzle 创建表，schema 源码在 `src/server/db/schema.ts`，迁移 SQL 在 `supabase/migrations/`。
+3. 用 Drizzle migration 创建表，schema 源码在 `src/server/db/schema.ts`，迁移 SQL 在 `supabase/migrations/`。
 4. 执行 seed 脚本导入默认 funnel。
 
 ```bash
-pnpm db:push
+pnpm db:migrate
 pnpm seed
 ```
 
-正式迁移流程：
+以后如果修改了 `src/server/db/schema.ts`，先生成新的 SQL migration，再同步到数据库：
 
 ```bash
 pnpm db:generate
 pnpm db:migrate
 ```
 
-`pnpm db:generate` 会根据 `src/server/db/schema.ts` 生成新的 SQL migration；`pnpm db:migrate` 会把 migration 执行到 `DATABASE_URL` 指向的 Supabase/Postgres。`pnpm db:push` 适合开发期快速同步 schema。
+`pnpm db:generate` 会根据 `src/server/db/schema.ts` 生成新的 SQL migration；`pnpm db:migrate` 会把 migration 执行到 `DATABASE_URL` 指向的 Supabase/Postgres。不要用 `drizzle-kit push` 作为本项目的同步方式：它需要先 introspect 远程 schema，当前 Supabase/Postgres check constraint 会触发 Drizzle Kit 的读取错误。已有表的数据库如果已经能正常 seed 和运行，可以继续使用；需要让 Drizzle migration 接管时，再给现有库补一条 baseline migration 记录，或者换一个空库重新执行上面的初始化命令。
 
 环境变量：
 

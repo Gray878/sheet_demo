@@ -9,9 +9,6 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is required.");
 }
 
-const raw = JSON.parse(await readFile("scrape/betterme_scrape/betterme_public_data.json", "utf8"));
-const db = getDb();
-
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -96,33 +93,33 @@ const coreQuestionKeys = new Set([
   "activityFrequency"
 ]);
 
-const scrapedSteps = (raw.quiz.steps as ScrapedStep[]).map((step, index) => ({
-  ...step,
-  mappedIndex: index >= 1 ? index + 1 : index
-}));
-
-const steps = [
-  scrapedSteps[0],
-  {
-    id: "gender",
-    type: "QUESTION",
-    title: "Which option best describes you?",
-    description: "This helps calibrate calorie guidance without creating an account.",
-    questionType: "single_select",
-    questionKey: "gender",
-    imageUrl: null,
-    questionImageUrl: null,
-    answers: [
-      { id: "gender_female", title: "Female", value: "female", iconUrl: null, order: 0 },
-      { id: "gender_male", title: "Male", value: "male", iconUrl: null, order: 1 },
-      { id: "gender_other", title: "Another option", value: "other", iconUrl: null, order: 2 }
-    ],
-    mappedIndex: 1
-  } satisfies ScrapedStep,
-  ...scrapedSteps.slice(1)
-].map((step, index) => ({ ...step, mappedIndex: index }));
-
-try {
+async function main() {
+  const raw = JSON.parse(await readFile("scrape/betterme_scrape/betterme_public_data.json", "utf8"));
+  const db = getDb();
+  const scrapedSteps = (raw.quiz.steps as ScrapedStep[]).map((step, index) => ({
+    ...step,
+    mappedIndex: index >= 1 ? index + 1 : index
+  }));
+  const steps = [
+    scrapedSteps[0],
+    {
+      id: "gender",
+      type: "QUESTION",
+      title: "Which option best describes you?",
+      description: "This helps calibrate calorie guidance without creating an account.",
+      questionType: "single_select",
+      questionKey: "gender",
+      imageUrl: null,
+      questionImageUrl: null,
+      answers: [
+        { id: "gender_female", title: "Female", value: "female", iconUrl: null, order: 0 },
+        { id: "gender_male", title: "Male", value: "male", iconUrl: null, order: 1 },
+        { id: "gender_other", title: "Another option", value: "other", iconUrl: null, order: 2 }
+      ],
+      mappedIndex: 1
+    } satisfies ScrapedStep,
+    ...scrapedSteps.slice(1)
+  ].map((step, index) => ({ ...step, mappedIndex: index }));
   const timestamp = new Date().toISOString();
 
   await db
@@ -219,6 +216,13 @@ try {
   }
 
   console.log(`Seeded ${steps.length} funnel steps.`);
-} finally {
-  await closeDb();
 }
+
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closeDb();
+  });

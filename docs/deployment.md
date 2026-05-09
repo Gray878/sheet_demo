@@ -14,10 +14,10 @@ The app does not need `NEXT_PUBLIC_SUPABASE_ANON_KEY` or `SUPABASE_SERVICE_ROLE_
 
 ## 2. Create Tables
 
-Use Drizzle to push the schema:
+Use Drizzle migrations to create the schema on a fresh Supabase database:
 
 ```bash
-pnpm db:push
+pnpm db:migrate
 ```
 
 The Drizzle source of truth is:
@@ -31,6 +31,15 @@ Generated SQL migrations live in:
 ```text
 supabase/migrations/
 ```
+
+For later schema changes, edit `src/server/db/schema.ts`, generate a migration, then apply it:
+
+```bash
+pnpm db:generate
+pnpm db:migrate
+```
+
+This project intentionally uses migrations instead of `drizzle-kit push`. `push` introspects the remote database before syncing, and the current Supabase/Postgres check constraints can trigger a Drizzle Kit constraint-reading error. If the target database already has these tables from an earlier manual/push attempt, either keep using it as-is after `pnpm seed`, add a Drizzle baseline migration record, or start from a fresh database before running `pnpm db:migrate`.
 
 The schema creates:
 
