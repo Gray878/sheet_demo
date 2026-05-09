@@ -1,4 +1,5 @@
 import scrapedData from "@/scrape/betterme_scrape/betterme_public_data.json";
+import { funnelAssetUrl } from "@/src/lib/funnel-assets";
 import type { AnswerType, Funnel, FunnelOption, FunnelStep } from "./types";
 
 type ScrapedStep = {
@@ -87,7 +88,7 @@ function optionsFor(step: ScrapedStep, questionKey: string): FunnelOption[] {
       value: optionValue(questionKey, label),
       label,
       description: answer.description ?? null,
-      iconUrl: answer.iconUrl ?? null,
+      iconUrl: funnelAssetUrl(answer.iconUrl),
       sortOrder: answer.order ?? index
     };
   });
@@ -116,7 +117,7 @@ function mapScrapedStep(step: ScrapedStep, stepIndex: number): FunnelStep {
       type: step.type === "LOADER" ? "loader" : "info",
       title: step.title ?? "Your plan is taking shape",
       description: step.description ?? null,
-      imageUrl: step.imageUrl ?? null,
+      imageUrl: funnelAssetUrl(step.imageUrl),
       questionImageUrl: null,
       required: false,
       options: []
@@ -133,8 +134,8 @@ function mapScrapedStep(step: ScrapedStep, stepIndex: number): FunnelStep {
     type: "question",
     title: step.title ?? "Tell us a little more",
     description: step.description ?? null,
-    imageUrl: step.imageUrl ?? null,
-    questionImageUrl: step.questionImageUrl ?? null,
+    imageUrl: funnelAssetUrl(step.imageUrl),
+    questionImageUrl: funnelAssetUrl(step.questionImageUrl),
     questionKey,
     questionType,
     required: coreQuestionKeys.has(questionKey),

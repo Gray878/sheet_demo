@@ -24,7 +24,7 @@
 | 前端 | Next.js App Router + TypeScript | 承载 funnel 页面、结果页和 API routes |
 | 后端 API | Next.js Route Handlers | 减少部署复杂度，适合 2 天快速交付 |
 | 数据库 | Supabase PostgreSQL | 存储用户 session、答案、结果、支付记录和 funnel 配置 |
-| 数据访问 | Supabase JS 或 Prisma | 2 天 MVP 可优先 Supabase JS；若时间允许再补 Prisma schema |
+| 数据访问 | Drizzle ORM | 服务端通过一条 `DATABASE_URL` 连接 Supabase Postgres |
 | 校验 | Zod | 校验答案、身体数据、支付请求 |
 | 部署 | Vercel | 部署 Next.js 应用 |
 | 支付 | Mock Pay，预留 PayPal 字段和接口 | 先跑通支付状态闭环，后续接 PayPal |
@@ -93,10 +93,8 @@ MVP 使用 `betterme_public_data.json` 中的核心字段：
 任务：
 
 1. 初始化 Next.js + TypeScript 项目。
-2. 配置 Supabase 环境变量：
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
+2. 配置数据库环境变量：
+   - `DATABASE_URL`
 3. 创建数据库表。
 4. 编写 seed 脚本，将 `betterme_public_data.json` 转换为：
    - `funnels`
@@ -293,7 +291,7 @@ flowchart TD
 | Vercel 在线链接 | 必须可访问 |
 | GitHub 仓库 | 包含完整源码 |
 | README | 包含启动、部署、API、测试 session |
-| Supabase Schema | 表结构完整 |
+| Drizzle Schema / Migration | 表结构完整 |
 | Seed 数据 | 使用爬取数据生成题目 |
 | `/api/pay` | 可用，可重复演示 |
 | 已支付 sessionId | 可直接对比结果差异 |
@@ -303,7 +301,7 @@ flowchart TD
 
 2 天时间有限，按以下顺序推进：
 
-1. 数据库 schema。
+1. Drizzle 数据库 schema。
 2. 爬取数据 seed。
 3. session 创建和恢复。
 4. 分步答案保存。
@@ -370,4 +368,3 @@ flowchart TD
 - [ ] Vercel 部署成功。
 - [ ] README 完成。
 - [ ] 测试 sessionId 准备完成。
-

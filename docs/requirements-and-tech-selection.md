@@ -540,7 +540,7 @@ erDiagram
 | API | Next.js Route Handlers | 满足挑战要求的 Node.js + TypeScript；减少 NestJS 独立部署成本 |
 | 服务分层 | `src/server/services`、`src/server/repositories`、`src/server/domain` | 即使使用 Next.js，也保持后端代码可测试、可维护 |
 | 数据库 | Supabase PostgreSQL | 公网数据库、部署快、可演示；Postgres 适合关系建模和事务 |
-| ORM | Prisma | schema 清晰、迁移方便、类型生成稳定，便于评审理解 |
+| ORM | Drizzle ORM | schema 清晰、迁移方便、类型贴近 SQL，服务端只需要一条 `DATABASE_URL` |
 | 校验 | Zod | API DTO、表单校验、业务边界统一定义 |
 | 样式 | Tailwind CSS | 快速搭建可信的 funnel UI，不把时间消耗在样式系统上 |
 | 测试 | Vitest + Playwright | Vitest 覆盖算法和 API service，Playwright 覆盖端到端流程 |
@@ -551,7 +551,7 @@ erDiagram
 
 NestJS 更适合长期维护的独立后端服务，分层、依赖注入和 OpenAPI 生态更完整。但本挑战周期只有 5 天，且需要同时交付前端 funnel、API、数据库、部署和文档。选择 Next.js Route Handlers 可以减少部署复杂度，把时间集中在数据建模、校验、持久化和权限闭环上。
 
-如果后续要扩展成正式产品，可以将 `src/server` 中的 service 和 repository 迁移到 NestJS，API 合约和 Prisma schema 可以基本复用。
+如果后续要扩展成正式产品，可以将 `src/server` 中的 service 和 repository 迁移到 NestJS，API 合约和 Drizzle schema 可以基本复用。
 
 ### 12.3 代码结构建议
 
@@ -661,7 +661,7 @@ docs/
 
 | 日期 | 目标 | 产出 |
 | --- | --- | --- |
-| Day 1 | 初始化项目、确定 schema、实现 Prisma migration 和 seed | 数据库可迁移，funnel 配置可读 |
+| Day 1 | 初始化项目、确定 schema、实现 Drizzle migration 和 seed | 数据库可迁移，funnel 配置可读 |
 | Day 2 | 实现 session、进度恢复、分步保存 API | API 可完成增量持久化 |
 | Day 3 | 实现计算逻辑、结果持久化、订阅鉴权和 `/pay` | 后端闭环跑通 |
 | Day 4 | 实现基础 funnel 前端和结果页，接入 API | 用户可从头到尾演示 |
@@ -683,13 +683,13 @@ docs/
 
 - 如何让 AI 根据挑战要求拆解 API 和数据库模型。
 - 如何让 AI 参考 BetterMe 公开数据抽象 funnel 结构，而不是复制素材。
-- 如何让 AI 生成 Prisma schema、Zod DTO 和测试用例。
+- 如何让 AI 生成 Drizzle schema、Zod DTO 和测试用例。
 - 哪些业务规则由你人工判断，例如健康算法边界、付费前后数据差异。
 - AI 生成内容中你审查和修正过的点，例如隐私边界、幂等支付、数据库索引。
 
 ## 18. 当前结论
 
-推荐采用 Next.js App Router + Route Handlers + Prisma + Supabase PostgreSQL 的单仓库方案。它能在 5 天内最大化交付确定性，同时通过清晰的 service/repository/domain 分层、严格 DTO 校验、事务和索引设计，体现后端架构能力。
+推荐采用 Next.js App Router + Route Handlers + Drizzle ORM + Supabase PostgreSQL 的单仓库方案。它能在 5 天内最大化交付确定性，同时通过清晰的 service/repository/domain 分层、严格 DTO 校验、事务和索引设计，体现后端架构能力。
 
 实现优先级应为：
 

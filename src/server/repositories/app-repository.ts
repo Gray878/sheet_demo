@@ -1,13 +1,19 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { asc, eq, sql } from "drizzle-orm";
+import { getDb, hasDatabaseUrl, type Database } from "@/src/server/db/client";
+import {
+  assessmentAnswers,
+  assessmentResults,
+  assessmentSessions,
+  payments
+} from "@/src/server/db/schema";
 import { notFound } from "@/src/server/domain/errors";
 import type {
   AssessmentAnswer,
   AssessmentResult,
   AssessmentSession,
-  Payment,
-  SubscriptionStatus
+  Payment
 } from "@/src/server/domain/types";
 import type { AnswerInput } from "@/src/server/validation/answer-schema";
 
@@ -218,174 +224,117 @@ class FileRepository implements AppRepository {
   }
 }
 
-type SessionRow = {
-  id: string;
-  anonymous_id: string;
-  flow_id: string;
-  status: AssessmentSession["status"];
-  current_step_index: number;
-  subscription_status: SubscriptionStatus;
-  submitted_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type AnswerRow = {
-  id: string;
-  session_id: string;
-  question_key: string;
-  question_id: string;
-  step_index: number;
-  answer_type: AssessmentAnswer["answerType"];
-  value: AssessmentAnswer["value"];
-  answered_at: string;
-  created_at: string;
-  updated_at: string;
-};
-
-type ResultRow = {
-  session_id: string;
-  bmi: number;
-  bmi_category: AssessmentResult["bmiCategory"];
-  bmr: number;
-  tdee: number;
-  recommended_calories: number;
-  target_date: string;
-  estimated_weeks: number;
-  estimated_weeks_range: string;
-  summary: AssessmentResult["summary"];
-  projection_curve: AssessmentResult["projectionCurve"];
-  recommendations: string[];
-  created_at: string;
-  updated_at: string;
-};
-
-type PaymentRow = {
-  id: string;
-  session_id: string;
-  provider: Payment["provider"];
-  provider_event_id: string;
-  provider_order_id: string | null;
-  provider_capture_id: string | null;
-  status: Payment["status"];
-  amount_cents: number;
-  currency: string;
-  raw_payload: unknown;
-  paid_at: string;
-  created_at: string;
-};
+type SessionRow = typeof assessmentSessions.$inferSelect;
+type AnswerRow = typeof assessmentAnswers.$inferSelect;
+type ResultRow = typeof assessmentResults.$inferSelect;
+type PaymentRow = typeof payments.$inferSelect;
 
 function mapSession(row: SessionRow): AssessmentSession {
   return {
     id: row.id,
-    anonymousId: row.anonymous_id,
-    flowId: row.flow_id,
+    anonymousId: row.anonymousId,
+    flowId: row.flowId,
     status: row.status,
-    currentStepIndex: row.current_step_index,
-    subscriptionStatus: row.subscription_status,
-    submittedAt: row.submitted_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    currentStepIndex: row.currentStepIndex,
+    subscriptionStatus: row.subscriptionStatus,
+    submittedAt: row.submittedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
   };
 }
 
 function mapAnswer(row: AnswerRow): AssessmentAnswer {
   return {
     id: row.id,
-    sessionId: row.session_id,
-    questionKey: row.question_key,
-    questionId: row.question_id,
-    stepIndex: row.step_index,
-    answerType: row.answer_type,
+    sessionId: row.sessionId,
+    questionKey: row.questionKey,
+    questionId: row.questionId,
+    stepIndex: row.stepIndex,
+    answerType: row.answerType,
     value: row.value,
-    answeredAt: row.answered_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    answeredAt: row.answeredAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
   };
 }
 
 function mapResult(row: ResultRow): AssessmentResult {
   return {
-    sessionId: row.session_id,
+    sessionId: row.sessionId,
     bmi: Number(row.bmi),
-    bmiCategory: row.bmi_category,
+    bmiCategory: row.bmiCategory,
     bmr: Number(row.bmr),
     tdee: Number(row.tdee),
-    recommendedCalories: row.recommended_calories,
-    targetDate: row.target_date,
-    estimatedWeeks: row.estimated_weeks,
-    estimatedWeeksRange: row.estimated_weeks_range,
+    recommendedCalories: row.recommendedCalories,
+    targetDate: row.targetDate,
+    estimatedWeeks: row.estimatedWeeks,
+    estimatedWeeksRange: row.estimatedWeeksRange,
     summary: row.summary,
-    projectionCurve: row.projection_curve,
+    projectionCurve: row.projectionCurve,
     recommendations: row.recommendations,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
   };
 }
 
 function mapPayment(row: PaymentRow): Payment {
   return {
     id: row.id,
-    sessionId: row.session_id,
+    sessionId: row.sessionId,
     provider: row.provider,
-    providerEventId: row.provider_event_id,
-    providerOrderId: row.provider_order_id,
-    providerCaptureId: row.provider_capture_id,
+    providerEventId: row.providerEventId,
+    providerOrderId: row.providerOrderId,
+    providerCaptureId: row.providerCaptureId,
     status: row.status,
-    amountCents: row.amount_cents,
+    amountCents: row.amountCents,
     currency: row.currency,
-    rawPayload: row.raw_payload,
-    paidAt: row.paid_at,
-    createdAt: row.created_at
+    rawPayload: row.rawPayload,
+    paidAt: row.paidAt,
+    createdAt: row.createdAt
   };
 }
 
-class SupabaseRepository implements AppRepository {
-  constructor(private readonly supabase: SupabaseClient) {}
+class DrizzleRepository implements AppRepository {
+  constructor(private readonly db: Database) {}
 
   async createSession() {
     const timestamp = now();
-    const { data, error } = await this.supabase
-      .from("assessment_sessions")
-      .insert({
+    const [row] = await this.db
+      .insert(assessmentSessions)
+      .values({
         id: crypto.randomUUID(),
-        anonymous_id: crypto.randomUUID(),
-        flow_id: "default",
+        anonymousId: crypto.randomUUID(),
+        flowId: "default",
         status: "in_progress",
-        current_step_index: 0,
-        subscription_status: "inactive",
-        submitted_at: null,
-        created_at: timestamp,
-        updated_at: timestamp
+        currentStepIndex: 0,
+        subscriptionStatus: "inactive",
+        submittedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp
       })
-      .select()
-      .single<SessionRow>();
+      .returning();
 
-    if (error) throw new Error(error.message);
-    return mapSession(data);
+    return mapSession(row);
   }
 
   async getSession(sessionId: string) {
-    const { data, error } = await this.supabase
-      .from("assessment_sessions")
-      .select("*")
-      .eq("id", sessionId)
-      .maybeSingle<SessionRow>();
+    const [row] = await this.db
+      .select()
+      .from(assessmentSessions)
+      .where(eq(assessmentSessions.id, sessionId))
+      .limit(1);
 
-    if (error) throw new Error(error.message);
-    return data ? mapSession(data) : null;
+    return row ? mapSession(row) : null;
   }
 
   async listAnswers(sessionId: string) {
-    const { data, error } = await this.supabase
-      .from("assessment_answers")
-      .select("*")
-      .eq("session_id", sessionId)
-      .order("step_index", { ascending: true })
-      .returns<AnswerRow[]>();
+    const rows = await this.db
+      .select()
+      .from(assessmentAnswers)
+      .where(eq(assessmentAnswers.sessionId, sessionId))
+      .orderBy(asc(assessmentAnswers.stepIndex));
 
-    if (error) throw new Error(error.message);
-    return data.map(mapAnswer);
+    return rows.map(mapAnswer);
   }
 
   async upsertAnswers(sessionId: string, currentStepIndex: number, answers: AnswerInput[]) {
@@ -394,91 +343,117 @@ class SupabaseRepository implements AppRepository {
 
     const timestamp = now();
     const rows = answers.map((answer) => ({
-      session_id: sessionId,
-      question_key: answer.questionKey,
-      question_id: answer.questionId,
-      step_index: answer.stepIndex,
-      answer_type: answer.answerType,
+      id: crypto.randomUUID(),
+      sessionId,
+      questionKey: answer.questionKey,
+      questionId: answer.questionId,
+      stepIndex: answer.stepIndex,
+      answerType: answer.answerType,
       value: answer.value,
-      answered_at: timestamp,
-      updated_at: timestamp
+      answeredAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp
     }));
 
-    const { data, error } = await this.supabase
-      .from("assessment_answers")
-      .upsert(rows, { onConflict: "session_id,question_key" })
-      .select()
-      .returns<AnswerRow[]>();
+    const saved = await this.db.transaction(async (tx) => {
+      const savedAnswers =
+        rows.length > 0
+          ? await tx
+              .insert(assessmentAnswers)
+              .values(rows)
+              .onConflictDoUpdate({
+                target: [assessmentAnswers.sessionId, assessmentAnswers.questionKey],
+                set: {
+                  questionId: sql`excluded.question_id`,
+                  stepIndex: sql`excluded.step_index`,
+                  answerType: sql`excluded.answer_type`,
+                  value: sql`excluded.value`,
+                  answeredAt: timestamp,
+                  updatedAt: timestamp
+                }
+              })
+              .returning()
+          : [];
 
-    if (error) throw new Error(error.message);
+      await tx
+        .update(assessmentSessions)
+        .set({
+          currentStepIndex: Math.max(session.currentStepIndex, currentStepIndex),
+          updatedAt: timestamp
+        })
+        .where(eq(assessmentSessions.id, sessionId));
 
-    const { error: sessionError } = await this.supabase
-      .from("assessment_sessions")
-      .update({
-        current_step_index: Math.max(session.currentStepIndex, currentStepIndex),
-        updated_at: timestamp
-      })
-      .eq("id", sessionId);
+      return savedAnswers;
+    });
 
-    if (sessionError) throw new Error(sessionError.message);
-    return data.map(mapAnswer);
+    return saved.map(mapAnswer);
   }
 
   async markResultReady(sessionId: string) {
     const timestamp = now();
-    const { data, error } = await this.supabase
-      .from("assessment_sessions")
-      .update({
+    const [row] = await this.db
+      .update(assessmentSessions)
+      .set({
         status: "result_ready",
-        submitted_at: timestamp,
-        updated_at: timestamp
+        submittedAt: timestamp,
+        updatedAt: timestamp
       })
-      .eq("id", sessionId)
-      .select()
-      .single<SessionRow>();
+      .where(eq(assessmentSessions.id, sessionId))
+      .returning();
 
-    if (error) throw new Error(error.message);
-    return mapSession(data);
+    if (!row) throw notFound("Session not found");
+    return mapSession(row);
   }
 
   async upsertResult(result: AssessmentResult) {
-    const { data, error } = await this.supabase
-      .from("assessment_results")
-      .upsert(
-        {
-          session_id: result.sessionId,
+    const [row] = await this.db
+      .insert(assessmentResults)
+      .values({
+        sessionId: result.sessionId,
+        bmi: result.bmi,
+        bmiCategory: result.bmiCategory,
+        bmr: result.bmr,
+        tdee: result.tdee,
+        recommendedCalories: result.recommendedCalories,
+        targetDate: result.targetDate,
+        estimatedWeeks: result.estimatedWeeks,
+        estimatedWeeksRange: result.estimatedWeeksRange,
+        summary: result.summary,
+        projectionCurve: result.projectionCurve,
+        recommendations: result.recommendations,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt
+      })
+      .onConflictDoUpdate({
+        target: assessmentResults.sessionId,
+        set: {
           bmi: result.bmi,
-          bmi_category: result.bmiCategory,
+          bmiCategory: result.bmiCategory,
           bmr: result.bmr,
           tdee: result.tdee,
-          recommended_calories: result.recommendedCalories,
-          target_date: result.targetDate,
-          estimated_weeks: result.estimatedWeeks,
-          estimated_weeks_range: result.estimatedWeeksRange,
+          recommendedCalories: result.recommendedCalories,
+          targetDate: result.targetDate,
+          estimatedWeeks: result.estimatedWeeks,
+          estimatedWeeksRange: result.estimatedWeeksRange,
           summary: result.summary,
-          projection_curve: result.projectionCurve,
+          projectionCurve: result.projectionCurve,
           recommendations: result.recommendations,
-          created_at: result.createdAt,
-          updated_at: result.updatedAt
-        },
-        { onConflict: "session_id" }
-      )
-      .select()
-      .single<ResultRow>();
+          updatedAt: result.updatedAt
+        }
+      })
+      .returning();
 
-    if (error) throw new Error(error.message);
-    return mapResult(data);
+    return mapResult(row);
   }
 
   async getResult(sessionId: string) {
-    const { data, error } = await this.supabase
-      .from("assessment_results")
-      .select("*")
-      .eq("session_id", sessionId)
-      .maybeSingle<ResultRow>();
+    const [row] = await this.db
+      .select()
+      .from(assessmentResults)
+      .where(eq(assessmentResults.sessionId, sessionId))
+      .limit(1);
 
-    if (error) throw new Error(error.message);
-    return data ? mapResult(data) : null;
+    return row ? mapResult(row) : null;
   }
 
   async activateSubscription(input: {
@@ -492,41 +467,47 @@ class SupabaseRepository implements AppRepository {
     if (!session) throw notFound("Session not found");
 
     const timestamp = now();
-    const { data: paymentData, error: paymentError } = await this.supabase
-      .from("payments")
-      .upsert(
-        {
-          session_id: input.sessionId,
+    return this.db.transaction(async (tx) => {
+      const [payment] = await tx
+        .insert(payments)
+        .values({
+          id: crypto.randomUUID(),
+          sessionId: input.sessionId,
           provider: "mock",
-          provider_event_id: input.providerEventId,
-          provider_order_id: null,
-          provider_capture_id: null,
+          providerEventId: input.providerEventId,
+          providerOrderId: null,
+          providerCaptureId: null,
           status: "succeeded",
-          amount_cents: input.amountCents,
+          amountCents: input.amountCents,
           currency: input.currency.toUpperCase(),
-          raw_payload: input.rawPayload,
-          paid_at: timestamp,
-          created_at: timestamp
-        },
-        { onConflict: "provider_event_id" }
-      )
-      .select()
-      .single<PaymentRow>();
+          rawPayload: input.rawPayload,
+          paidAt: timestamp,
+          createdAt: timestamp
+        })
+        .onConflictDoUpdate({
+          target: payments.providerEventId,
+          set: {
+            status: "succeeded",
+            amountCents: input.amountCents,
+            currency: input.currency.toUpperCase(),
+            rawPayload: input.rawPayload,
+            paidAt: timestamp
+          }
+        })
+        .returning();
 
-    if (paymentError) throw new Error(paymentError.message);
+      const [updatedSession] = await tx
+        .update(assessmentSessions)
+        .set({
+          subscriptionStatus: "active",
+          updatedAt: timestamp
+        })
+        .where(eq(assessmentSessions.id, input.sessionId))
+        .returning();
 
-    const { data: sessionData, error: sessionError } = await this.supabase
-      .from("assessment_sessions")
-      .update({
-        subscription_status: "active",
-        updated_at: timestamp
-      })
-      .eq("id", input.sessionId)
-      .select()
-      .single<SessionRow>();
-
-    if (sessionError) throw new Error(sessionError.message);
-    return { session: mapSession(sessionData), payment: mapPayment(paymentData) };
+      if (!updatedSession) throw notFound("Session not found");
+      return { session: mapSession(updatedSession), payment: mapPayment(payment) };
+    });
   }
 }
 
@@ -535,13 +516,7 @@ let repository: AppRepository | null = null;
 export function getRepository(): AppRepository {
   if (repository) return repository;
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  repository =
-    url && serviceRoleKey
-      ? new SupabaseRepository(createClient(url, serviceRoleKey, { auth: { persistSession: false } }))
-      : new FileRepository();
+  repository = hasDatabaseUrl() ? new DrizzleRepository(getDb()) : new FileRepository();
 
   return repository;
 }

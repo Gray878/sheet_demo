@@ -2,7 +2,7 @@
 
 一个健康测评 funnel MVP，用来覆盖全栈挑战里的核心后端闭环：匿名 session、分步保存、进度恢复、服务端计算、结果鉴权和 mock 支付解锁。
 
-当前实现优先保证本地可演示。没有 Supabase 环境变量时，API 会写入 `data/dev-db.json`；配置 Supabase 后，服务端会自动切到 PostgreSQL。
+当前实现优先保证本地可演示。没有 `DATABASE_URL` 时，API 会写入 `data/dev-db.json`；配置 Supabase Postgres 连接串后，服务端会通过 Drizzle 自动切到 PostgreSQL。
 
 ## 技术栈
 
@@ -10,37 +10,55 @@
 - Route Handlers 作为后端 API
 - Zod 做请求和答案校验
 - Supabase PostgreSQL 作为生产存储
+- Drizzle ORM 作为服务端数据访问层
 - 本地文件存储作为开发 fallback
 - Vitest 覆盖健康评估计算
 
 ## 本地启动
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
-打开 `http://localhost:3000`，可以从测评首页一路填写到结果页。未配置 Supabase 时，数据保存在 `data/dev-db.json`，这个文件已被 `.gitignore` 忽略。
+打开 `http://localhost:3000`，可以从测评首页一路填写到结果页。未配置 `DATABASE_URL` 时，数据保存在 `data/dev-db.json`，这个文件已被 `.gitignore` 忽略。
 
-## Supabase 初始化
+## 图片资源
 
-1. 在 Supabase SQL editor 执行 `supabase/schema.sql`。
-2. 在本地或 Vercel 配置环境变量。
-3. 执行 seed 脚本导入默认 funnel。
+Funnel 图片已上传到 CDN，前端和 seed 数据都会把抓取数据里的图片 ID 映射成：
+
+```text
+https://cdn.gandalfpuzzle.com/temp/funnel/<image-id>.webp
+```
+
+## 数据库初始化
+
+1. 从 Supabase Project Settings -> Database -> Connection string 复制 Postgres URI。
+2. 在本地或 Vercel 配置 `DATABASE_URL`。
+3. 用 Drizzle 创建表，schema 源码在 `src/server/db/schema.ts`，迁移 SQL 在 `supabase/migrations/`。
+4. 执行 seed 脚本导入默认 funnel。
 
 ```bash
-npm run seed:supabase
+pnpm db:push
+pnpm seed
 ```
+
+正式迁移流程：
+
+```bash
+pnpm db:generate
+pnpm db:migrate
+```
+
+`pnpm db:generate` 会根据 `src/server/db/schema.ts` 生成新的 SQL migration；`pnpm db:migrate` 会把 migration 执行到 `DATABASE_URL` 指向的 Supabase/Postgres。`pnpm db:push` 适合开发期快速同步 schema。
 
 环境变量：
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+DATABASE_URL=postgres://...
 ```
 
-服务端写操作使用 `SUPABASE_SERVICE_ROLE_KEY`，前端不会直接写库。
+所有数据库读写都在服务端完成，前端不会直接持有 Supabase anon key 或 service role key。Vercel/Supabase pooler 连接建议使用 transaction pooler URI。
 
 更完整的部署步骤见 `docs/deployment.md`。
 
@@ -117,19 +135,20 @@ curl -X POST http://localhost:3000/api/pay \
 ## 测试
 
 ```bash
-npm run typecheck
-npm test
+pnpm typecheck
+pnpm test
 ```
 
 部署后创建评审用测试 session：
 
 ```bash
-APP_URL=https://your-vercel-domain.vercel.app PAID=true npm run demo:session
+APP_URL=https://your-vercel-domain.vercel.app PAID=true pnpm demo:session
 ```
 
 ## 交付说明
 
-- 数据库 schema：`supabase/schema.sql`
+- Drizzle schema：`src/server/db/schema.ts`
+- 数据库 migration：`supabase/migrations/`
 - API 细节：`docs/api.md`
 - Supabase/Vercel 部署：`docs/deployment.md`
 - AI 使用复盘草稿：`docs/ai-retrospective.md`

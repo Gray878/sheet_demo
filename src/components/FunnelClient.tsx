@@ -30,23 +30,19 @@ const sessionStorageKey = "health_funnel_session_id";
 const ageCards = [
   {
     label: "Age: 18-29",
-    imageUrl:
-      "https://image-service.betterme.world/57355568-8766-44a5-a327-6266bc0080f7/image/upload/c_fill%2Cw_960/f_webp/q_auto:eco/fl_lossy/c_fit/r9r7heaa3tj2b59ao8gv"
+    imageUrl: "https://cdn.gandalfpuzzle.com/temp/funnel/r9r7heaa3tj2b59ao8gv.webp"
   },
   {
     label: "Age: 30-39",
-    imageUrl:
-      "https://image-service.betterme.world/57355568-8766-44a5-a327-6266bc0080f7/image/upload/c_fill%2Cw_960/f_webp/q_auto:eco/fl_lossy/c_fit/ezhryf9gr4hypl4yuvek"
+    imageUrl: "https://cdn.gandalfpuzzle.com/temp/funnel/ezhryf9gr4hypl4yuvek.webp"
   },
   {
     label: "Age: 40-49",
-    imageUrl:
-      "https://image-service.betterme.world/57355568-8766-44a5-a327-6266bc0080f7/image/upload/c_fill%2Cw_960/f_webp/q_auto:eco/fl_lossy/c_fit/zametd6l35xiqgoyg7qp"
+    imageUrl: "https://cdn.gandalfpuzzle.com/temp/funnel/zametd6l35xiqgoyg7qp.webp"
   },
   {
     label: "Age: 50+",
-    imageUrl:
-      "https://image-service.betterme.world/57355568-8766-44a5-a327-6266bc0080f7/image/upload/c_fill%2Cw_960/f_webp/q_auto:eco/fl_lossy/c_fit/kcrhcq05lujnbbjszq3w"
+    imageUrl: "https://cdn.gandalfpuzzle.com/temp/funnel/kcrhcq05lujnbbjszq3w.webp"
   }
 ];
 

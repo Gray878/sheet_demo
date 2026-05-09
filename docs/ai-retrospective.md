@@ -6,7 +6,7 @@
 
 ## 数据建模
 
-AI 辅助生成了初版表结构，再结合 Supabase/Postgres 最佳实践进行审查：
+AI 辅助生成了初版表结构，再结合 Drizzle/Supabase Postgres 最佳实践进行审查：
 
 - 使用 `uuid` 暴露给前端，避免自增 ID 泄露。
 - 使用 `timestamptz` 保存时间。
@@ -15,6 +15,8 @@ AI 辅助生成了初版表结构，再结合 Supabase/Postgres 最佳实践进�
 - 使用 `unique(session_id, question_key)` 支撑答案 upsert。
 - 使用 `provider_event_id` 唯一约束保证支付幂等。
 - 为 `subscription_status = 'active'` 增加 partial index。
+
+数据访问层后续收敛到 Drizzle ORM，只保留一条 `DATABASE_URL`，避免前端不需要的 Supabase anon key 和服务端 service role key 出现在项目配置里。
 
 ## BetterMe 数据抽象
 

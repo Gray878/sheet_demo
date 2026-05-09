@@ -8,13 +8,17 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "seed:supabase": "node scripts/seed-supabase.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "seed": "tsx scripts/seed.ts",
     "demo:session": "node scripts/create-demo-session.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.4",
+    "drizzle-orm": "^0.44.7",
     "lucide-react": "^0.468.0",
     "next": "^15.1.4",
+    "postgres": "^3.4.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.1"
@@ -23,6 +27,9 @@
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "dotenv": "^17.2.3",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.20.6",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }
