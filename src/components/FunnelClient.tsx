@@ -26,10 +26,14 @@ type SessionProgress = {
 };
 
 type QuestionImageFit = "is-landscape" | "is-portrait" | "is-square";
+type StepTransitionDirection = "forward" | "back";
+type StepTransitionPhase = "idle" | "entering" | "exiting";
 
 const sessionStorageKey = "health_funnel_session_id";
 const singleSelectFeedbackMs = 135;
 const inputAutoAdvanceMs = 760;
+const stepExitMs = 120;
+const stepEnterMs = 240;
 
 const sensitiveQuestionKeys = new Set(["age", "heightCm", "currentWeightKg", "targetWeightKg", "gender"]);
 
@@ -138,6 +142,8 @@ export function FunnelClient() {
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const advanceLockedRef = useRef(false);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stepTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transitionRunRef = useRef(0);
   const inputTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stepIndexRef = useRef(0);
   const [funnel, setFunnel] = useState<Funnel | null>(null);
@@ -148,6 +154,10 @@ export function FunnelClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [questionImageFits, setQuestionImageFits] = useState<Record<string, QuestionImageFit>>({});
+  const [stepTransition, setStepTransition] = useState<{
+    direction: StepTransitionDirection;
+    phase: StepTransitionPhase;
+  }>({ direction: "forward", phase: "idle" });
 
   useEffect(() => {
     let cancelled = false;
@@ -212,6 +222,7 @@ export function FunnelClient() {
   useEffect(() => {
     return () => {
       if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+      if (stepTransitionTimerRef.current) clearTimeout(stepTransitionTimerRef.current);
       if (inputTimerRef.current) clearTimeout(inputTimerRef.current);
     };
   }, []);
@@ -221,11 +232,16 @@ export function FunnelClient() {
   const activeProgressStage = progressStageFor(progress);
   const selectedValue = step?.questionKey ? answers[step.questionKey] : undefined;
   const canContinue = step ? hasValue(step, selectedValue) : false;
-  const isBusy = isPending || saving;
+  const isStepTransitioning = stepTransition.phase !== "idle";
+  const isBusy = isPending || saving || isStepTransitioning;
   const questionMediaUrl = step?.questionImageUrl ?? step?.imageUrl ?? null;
   const questionImageFit = questionMediaUrl ? questionImageFits[questionMediaUrl] : undefined;
   const hasSideQuestionImage = questionImageFit === "is-portrait";
   const supportText = step ? questionSupportText(step) : null;
+  const questionTransitionClass =
+    stepTransition.phase === "idle"
+      ? ""
+      : `is-${stepTransition.phase}-${stepTransition.direction}`;
 
   const nextLabel = useMemo(() => {
     if (!funnel) return "Continue";
@@ -251,6 +267,22 @@ export function FunnelClient() {
       return { ...current, [url]: nextFit };
     });
   }
+
+  useEffect(() => {
+    if (!funnel) return;
+
+    const nearbyMediaUrls = [stepIndex - 1, stepIndex + 1]
+      .map((index) => funnel.steps[index])
+      .map((nearbyStep) => nearbyStep?.questionImageUrl ?? nearbyStep?.imageUrl ?? null)
+      .filter((url): url is string => Boolean(url));
+
+    nearbyMediaUrls.forEach((url) => {
+      if (questionImageFits[url]) return;
+      const image = new window.Image();
+      image.onload = () => rememberQuestionImageFit(url, image);
+      image.src = url;
+    });
+  }, [funnel, questionImageFits, stepIndex]);
 
   function renderQuestionImage(placement: "inline" | "side") {
     if (!questionMediaUrl) return null;
@@ -303,6 +335,44 @@ export function FunnelClient() {
     return queuedSave;
   }
 
+  function clearStepTransitionTimer() {
+    if (stepTransitionTimerRef.current) {
+      clearTimeout(stepTransitionTimerRef.current);
+      stepTransitionTimerRef.current = null;
+    }
+  }
+
+  function cancelStepTransition(direction: StepTransitionDirection) {
+    transitionRunRef.current += 1;
+    clearStepTransitionTimer();
+    setStepTransition({ direction, phase: "idle" });
+  }
+
+  function transitionToStep(targetIndex: number, direction: StepTransitionDirection) {
+    if (targetIndex === stepIndexRef.current) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+      const transitionId = transitionRunRef.current + 1;
+      transitionRunRef.current = transitionId;
+      clearStepTransitionTimer();
+      setStepTransition({ direction, phase: "exiting" });
+
+      stepTransitionTimerRef.current = setTimeout(() => {
+        if (transitionRunRef.current !== transitionId) return;
+
+        setStepIndex(targetIndex);
+        setStepTransition({ direction, phase: "entering" });
+        resolve();
+
+        stepTransitionTimerRef.current = setTimeout(() => {
+          if (transitionRunRef.current !== transitionId) return;
+          setStepTransition({ direction, phase: "idle" });
+          stepTransitionTimerRef.current = null;
+        }, stepEnterMs);
+      }, stepExitMs);
+    });
+  }
+
   async function advanceFromCurrentStep(
     value: AnswerValue | undefined = selectedValue,
     options: { optimistic?: boolean; feedbackMs?: number } = {}
@@ -338,10 +408,11 @@ export function FunnelClient() {
         if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
 
         transitionTimerRef.current = setTimeout(() => {
-          setStepIndex(targetIndex);
-          advanceLockedRef.current = false;
-          setSaving(false);
           transitionTimerRef.current = null;
+          void transitionToStep(targetIndex, "forward").then(() => {
+            advanceLockedRef.current = false;
+            setSaving(false);
+          });
         }, options.feedbackMs ?? 0);
 
         savePromise.catch((saveError) => {
@@ -349,6 +420,7 @@ export function FunnelClient() {
             clearTimeout(transitionTimerRef.current);
             transitionTimerRef.current = null;
           }
+          cancelStepTransition("forward");
           advanceLockedRef.current = false;
           setSaving(false);
           setStepIndex((current) => (current === targetIndex ? sourceIndex : current));
@@ -359,7 +431,7 @@ export function FunnelClient() {
 
       setSaving(true);
       await savePromise;
-      setStepIndex(targetIndex);
+      await transitionToStep(targetIndex, "forward");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save this step");
     } finally {
@@ -384,7 +456,7 @@ export function FunnelClient() {
       inputTimerRef.current = null;
     }
     setError(null);
-    setStepIndex((current) => Math.max(0, current - 1));
+    void transitionToStep(Math.max(0, stepIndex - 1), "back");
   }
 
   function resetDemo() {
@@ -504,7 +576,10 @@ export function FunnelClient() {
           </div>
         </div>
 
-        <div className={`bm-question-zone ${hasSideQuestionImage ? "with-side-image" : ""}`} key={step.id}>
+        <div
+          className={`bm-question-zone ${hasSideQuestionImage ? "with-side-image" : ""} ${questionTransitionClass}`}
+          key={step.id}
+        >
           <div className="bm-question-content">
             <h1>{step.title}</h1>
             {supportText ? <p className="bm-question-support">{supportText}</p> : null}
