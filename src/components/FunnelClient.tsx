@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, Check, ChevronRight, LoaderCircle, Menu, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { AnswerValue, Funnel, FunnelStep } from "@/src/server/domain/types";
 
 type ApiEnvelope<T> = {
@@ -26,6 +26,8 @@ type SessionProgress = {
 };
 
 const sessionStorageKey = "health_funnel_session_id";
+const singleSelectFeedbackMs = 135;
+const inputAutoAdvanceMs = 760;
 
 const ageCards = [
   {
@@ -66,7 +68,14 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 function hasValue(step: FunnelStep, value: AnswerValue | undefined) {
   if (step.type !== "question") return true;
   if (step.questionType === "multi_select") return Array.isArray(value) && value.length > 0;
-  if (step.questionType === "input") return typeof value === "number" && !Number.isNaN(value);
+  if (step.questionType === "input") {
+    return (
+      typeof value === "number" &&
+      !Number.isNaN(value) &&
+      value >= (step.input?.min ?? Number.NEGATIVE_INFINITY) &&
+      value <= (step.input?.max ?? Number.POSITIVE_INFINITY)
+    );
+  }
   return typeof value === "string" && value.length > 0;
 }
 
@@ -84,12 +93,18 @@ function BetterMeHeader() {
 export function FunnelClient() {
   const router = useRouter();
   const [isPending, startTransitionLocal] = useTransition();
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const advanceLockedRef = useRef(false);
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stepIndexRef = useRef(0);
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,10 +158,26 @@ export function FunnelClient() {
     };
   }, []);
 
+  useEffect(() => {
+    stepIndexRef.current = stepIndex;
+    if (inputTimerRef.current) {
+      clearTimeout(inputTimerRef.current);
+      inputTimerRef.current = null;
+    }
+  }, [stepIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+      if (inputTimerRef.current) clearTimeout(inputTimerRef.current);
+    };
+  }, []);
+
   const step = funnel?.steps[stepIndex] ?? null;
   const progress = funnel ? Math.round(((stepIndex + 1) / funnel.steps.length) * 100) : 0;
   const selectedValue = step?.questionKey ? answers[step.questionKey] : undefined;
   const canContinue = step ? hasValue(step, selectedValue) : false;
+  const isBusy = isPending || saving;
 
   const nextLabel = useMemo(() => {
     if (!funnel) return "Continue";
@@ -159,8 +190,8 @@ export function FunnelClient() {
     setAnswers((current) => ({ ...current, [step.questionKey as string]: value }));
   }
 
-  async function persistCurrentStep(targetIndex: number) {
-    if (!step || step.type !== "question" || !step.questionKey || !sessionId) return;
+  async function persistStepAnswer(stepToPersist: FunnelStep, targetIndex: number, value: AnswerValue | undefined) {
+    if (stepToPersist.type !== "question" || !stepToPersist.questionKey || !sessionId) return;
 
     await api(`/api/sessions/${sessionId}/answers`, {
       method: "PATCH",
@@ -168,43 +199,103 @@ export function FunnelClient() {
         currentStepIndex: targetIndex,
         answers: [
           {
-            questionKey: step.questionKey,
-            questionId: step.id,
-            stepIndex: step.stepIndex,
-            answerType: step.questionType,
-            value: answers[step.questionKey]
+            questionKey: stepToPersist.questionKey,
+            questionId: stepToPersist.id,
+            stepIndex: stepToPersist.stepIndex,
+            answerType: stepToPersist.questionType,
+            value
           }
         ]
       })
     });
   }
 
-  async function handleNext() {
+  function enqueuePersist(stepToPersist: FunnelStep, targetIndex: number, value: AnswerValue | undefined) {
+    const queuedSave = saveQueueRef.current.then(() => persistStepAnswer(stepToPersist, targetIndex, value));
+    saveQueueRef.current = queuedSave.catch(() => undefined);
+    return queuedSave;
+  }
+
+  async function advanceFromCurrentStep(
+    value: AnswerValue | undefined = selectedValue,
+    options: { optimistic?: boolean; feedbackMs?: number } = {}
+  ) {
     if (!funnel || !step || !sessionId) return;
-    if (!canContinue) {
+    if (saving || advanceLockedRef.current) return;
+    if (!hasValue(step, value)) {
       setError("Choose an answer to keep going.");
       return;
     }
+
+    let shouldClearSaving = true;
+    advanceLockedRef.current = true;
 
     try {
       setError(null);
       const isLastStep = stepIndex === funnel.steps.length - 1;
       const targetIndex = Math.min(stepIndex + 1, funnel.steps.length - 1);
-      await persistCurrentStep(targetIndex);
+      const sourceIndex = stepIndex;
+      const savePromise = enqueuePersist(step, targetIndex, value);
 
       if (isLastStep) {
+        setSaving(true);
+        await savePromise;
         await api(`/api/sessions/${sessionId}/submit`, { method: "POST" });
         startTransitionLocal(() => router.push(`/result/${sessionId}`));
         return;
       }
 
+      if (options.optimistic) {
+        shouldClearSaving = false;
+        setSaving(true);
+        if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+
+        transitionTimerRef.current = setTimeout(() => {
+          setStepIndex(targetIndex);
+          advanceLockedRef.current = false;
+          setSaving(false);
+          transitionTimerRef.current = null;
+        }, options.feedbackMs ?? 0);
+
+        savePromise.catch((saveError) => {
+          if (transitionTimerRef.current) {
+            clearTimeout(transitionTimerRef.current);
+            transitionTimerRef.current = null;
+          }
+          advanceLockedRef.current = false;
+          setSaving(false);
+          setStepIndex((current) => (current === targetIndex ? sourceIndex : current));
+          setError(saveError instanceof Error ? saveError.message : "Unable to save this answer");
+        });
+        return;
+      }
+
+      setSaving(true);
+      await savePromise;
       setStepIndex(targetIndex);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save this step");
+    } finally {
+      if (shouldClearSaving) {
+        advanceLockedRef.current = false;
+        setSaving(false);
+      }
     }
   }
 
+  async function handleNext() {
+    if (inputTimerRef.current) {
+      clearTimeout(inputTimerRef.current);
+      inputTimerRef.current = null;
+    }
+    await advanceFromCurrentStep();
+  }
+
   function handleBack() {
+    if (inputTimerRef.current) {
+      clearTimeout(inputTimerRef.current);
+      inputTimerRef.current = null;
+    }
     setError(null);
     setStepIndex((current) => Math.max(0, current - 1));
   }
@@ -218,6 +309,16 @@ export function FunnelClient() {
     window.localStorage.setItem("health_funnel_age_range", label);
     setError(null);
     setStepIndex(1);
+  }
+
+  function scheduleInputAutoAdvance(stepToAdvance: FunnelStep, value: AnswerValue) {
+    if (inputTimerRef.current) clearTimeout(inputTimerRef.current);
+
+    inputTimerRef.current = setTimeout(() => {
+      inputTimerRef.current = null;
+      if (stepIndexRef.current !== stepToAdvance.stepIndex) return;
+      void advanceFromCurrentStep(value, { optimistic: true, feedbackMs: 90 });
+    }, inputAutoAdvanceMs);
   }
 
   if (loading) {
@@ -304,7 +405,7 @@ export function FunnelClient() {
           </span>
         </div>
 
-        <div className="bm-question-zone">
+        <div className="bm-question-zone" key={step.id}>
           <h1>{step.title}</h1>
           {step.description ? <p className="lede">{step.description}</p> : null}
 
@@ -345,8 +446,13 @@ export function FunnelClient() {
                         );
                       } else {
                         setAnswer(step, option.value);
+                        void advanceFromCurrentStep(option.value, {
+                          optimistic: true,
+                          feedbackMs: singleSelectFeedbackMs
+                        });
                       }
                     }}
+                    disabled={isBusy}
                     type="button"
                   >
                     {option.iconUrl ? (
@@ -371,7 +477,22 @@ export function FunnelClient() {
                 min={step.input?.min}
                 onChange={(event) => {
                   const numericValue = Number(event.target.value);
-                  setAnswer(step, event.target.value === "" ? null : numericValue);
+                  const nextValue = event.target.value === "" ? null : numericValue;
+                  setAnswer(step, nextValue);
+
+                  if (inputTimerRef.current) {
+                    clearTimeout(inputTimerRef.current);
+                    inputTimerRef.current = null;
+                  }
+
+                  if (
+                    typeof nextValue === "number" &&
+                    !Number.isNaN(nextValue) &&
+                    nextValue >= (step.input?.min ?? Number.NEGATIVE_INFINITY) &&
+                    nextValue <= (step.input?.max ?? Number.POSITIVE_INFINITY)
+                  ) {
+                    scheduleInputAutoAdvance(step, nextValue);
+                  }
                 }}
                 placeholder={step.input?.placeholder}
                 type="number"
@@ -384,12 +505,12 @@ export function FunnelClient() {
         </div>
 
         <div className="bm-nav-row">
-          <button className="bm-secondary-button" disabled={stepIndex === 0 || isPending} onClick={handleBack} type="button">
+          <button className="bm-secondary-button" disabled={stepIndex === 0 || isBusy} onClick={handleBack} type="button">
             <ArrowLeft size={18} />
             Back
           </button>
-          <button className="bm-primary-button" disabled={!canContinue || isPending} onClick={handleNext} type="button">
-            {isPending ? <LoaderCircle className="spin" size={18} /> : null}
+          <button className="bm-primary-button" disabled={!canContinue || isBusy} onClick={handleNext} type="button">
+            {isBusy ? <LoaderCircle className="spin" size={18} /> : null}
             {nextLabel}
             <ArrowRight size={18} />
           </button>

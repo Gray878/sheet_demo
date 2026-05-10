@@ -282,6 +282,8 @@ a {
   justify-content: center;
   padding: 42px 0 28px;
   text-align: center;
+  animation: bm-question-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
 }
 
 .bm-question-zone h1 {
@@ -355,6 +357,11 @@ a {
   font-weight: 700;
   text-align: left;
   box-shadow: 0 3px 0 rgba(79, 99, 177, 0.08);
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .bm-option-button > span:nth-child(2),
@@ -384,10 +391,22 @@ a {
   display: block;
 }
 
-.bm-option-button:hover,
+.bm-option-button:hover:not(:disabled),
 .bm-option-button.selected {
   border-color: #4f63b1;
   background: #f2f4ff;
+}
+
+.bm-option-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.bm-option-button:active:not(:disabled) {
+  transform: scale(0.992);
+}
+
+.bm-option-button.selected {
+  box-shadow: 0 7px 18px rgba(79, 99, 177, 0.14);
 }
 
 .bm-number-field {
@@ -887,6 +906,30 @@ button:disabled {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes bm-question-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bm-question-zone,
+  .spin {
+    animation: none;
+  }
+
+  .bm-option-button,
+  .bm-progress-track span {
+    transition: none;
   }
 }
 
