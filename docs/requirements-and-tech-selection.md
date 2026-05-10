@@ -496,7 +496,7 @@ erDiagram
   }
 
   assessment_answers {
-    bigint id PK
+    uuid id PK
     uuid session_id FK
     text question_key
     text question_id
@@ -519,7 +519,7 @@ erDiagram
   }
 
   payments {
-    bigint id PK
+    uuid id PK
     uuid session_id FK
     text provider
     text provider_event_id UK
