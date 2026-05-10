@@ -25,6 +25,8 @@ type SessionProgress = {
   }>;
 };
 
+type QuestionImageFit = "is-landscape" | "is-portrait" | "is-square";
+
 const sessionStorageKey = "health_funnel_session_id";
 const singleSelectFeedbackMs = 135;
 const inputAutoAdvanceMs = 760;
@@ -105,6 +107,7 @@ export function FunnelClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [questionImageFits, setQuestionImageFits] = useState<Record<string, QuestionImageFit>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -178,6 +181,9 @@ export function FunnelClient() {
   const selectedValue = step?.questionKey ? answers[step.questionKey] : undefined;
   const canContinue = step ? hasValue(step, selectedValue) : false;
   const isBusy = isPending || saving;
+  const questionMediaUrl = step?.questionImageUrl ?? step?.imageUrl ?? null;
+  const questionImageFit = questionMediaUrl ? questionImageFits[questionMediaUrl] : undefined;
+  const hasSideQuestionImage = questionImageFit === "is-portrait";
 
   const nextLabel = useMemo(() => {
     if (!funnel) return "Continue";
@@ -188,6 +194,45 @@ export function FunnelClient() {
     if (!step.questionKey) return;
     setError(null);
     setAnswers((current) => ({ ...current, [step.questionKey as string]: value }));
+  }
+
+  function rememberQuestionImageFit(url: string, image: HTMLImageElement) {
+    const { naturalHeight, naturalWidth } = image;
+    if (!naturalHeight || !naturalWidth) return;
+
+    const heightToWidth = naturalHeight / naturalWidth;
+    const nextFit: QuestionImageFit =
+      heightToWidth > 1.16 ? "is-portrait" : heightToWidth < 0.9 ? "is-landscape" : "is-square";
+
+    setQuestionImageFits((current) => {
+      if (current[url] === nextFit) return current;
+      return { ...current, [url]: nextFit };
+    });
+  }
+
+  function renderQuestionImage(placement: "inline" | "side") {
+    if (!questionMediaUrl) return null;
+
+    if (!questionImageFit) {
+      return placement === "inline" ? (
+        <img
+          alt=""
+          className="bm-question-image-probe"
+          onLoad={(event) => rememberQuestionImageFit(questionMediaUrl, event.currentTarget)}
+          src={questionMediaUrl}
+        />
+      ) : null;
+    }
+
+    return (
+      <div className={`bm-question-image ${questionImageFit} ${placement === "side" ? "side" : "inline"}`}>
+        <img
+          alt=""
+          onLoad={(event) => rememberQuestionImageFit(questionMediaUrl, event.currentTarget)}
+          src={questionMediaUrl}
+        />
+      </div>
+    );
   }
 
   async function persistStepAnswer(stepToPersist: FunnelStep, targetIndex: number, value: AnswerValue | undefined) {
@@ -391,7 +436,7 @@ export function FunnelClient() {
   return (
     <main className="bm-quiz-page">
       <BetterMeHeader />
-      <section className="bm-quiz-shell" aria-live="polite">
+      <section className={`bm-quiz-shell ${hasSideQuestionImage ? "has-side-image" : ""}`} aria-live="polite">
         <div className="bm-progress-row">
           <button className="bm-link-button" onClick={resetDemo} type="button">
             <RefreshCw size={16} />
@@ -405,103 +450,107 @@ export function FunnelClient() {
           </span>
         </div>
 
-        <div className="bm-question-zone" key={step.id}>
-          <h1>{step.title}</h1>
-          {step.description ? <p className="lede">{step.description}</p> : null}
+        <div className={`bm-question-zone ${hasSideQuestionImage ? "with-side-image" : ""}`} key={step.id}>
+          <div className="bm-question-content">
+            <h1>{step.title}</h1>
+            {step.description ? <p className="lede">{step.description}</p> : null}
 
-          {step.questionImageUrl || step.imageUrl ? (
-            <div className="bm-question-image">
-              <img alt="" src={step.questionImageUrl ?? step.imageUrl ?? ""} />
+            {renderQuestionImage("inline")}
+
+            {step.type === "info" ? (
+              <div className="bm-info-strip">
+                <span>Low-impact training</span>
+                <span>Server-calculated results</span>
+                <span>Progress saved</span>
+              </div>
+            ) : null}
+
+            {step.type === "question" && step.questionType !== "input" ? (
+              <div className={step.questionType === "multi_select" ? "bm-option-grid compact" : "bm-option-grid"}>
+                {step.options.map((option) => {
+                  const selected =
+                    step.questionType === "multi_select"
+                      ? Array.isArray(selectedValue) && selectedValue.includes(option.value)
+                      : selectedValue === option.value;
+
+                  return (
+                    <button
+                      className={`bm-option-button ${selected ? "selected" : ""}`}
+                      key={option.id}
+                      onClick={() => {
+                        if (step.questionType === "multi_select") {
+                          const current = Array.isArray(selectedValue) ? selectedValue : [];
+                          setAnswer(
+                            step,
+                            current.includes(option.value)
+                              ? current.filter((value) => value !== option.value)
+                              : [...current, option.value]
+                          );
+                        } else {
+                          setAnswer(step, option.value);
+                          void advanceFromCurrentStep(option.value, {
+                            optimistic: true,
+                            feedbackMs: singleSelectFeedbackMs
+                          });
+                        }
+                      }}
+                      disabled={isBusy}
+                      type="button"
+                    >
+                      {option.iconUrl ? (
+                        <span className="bm-option-icon">
+                          <img alt="" src={option.iconUrl} />
+                        </span>
+                      ) : null}
+                      <span>{option.label}</span>
+                      {selected ? <Check size={18} aria-hidden="true" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {step.type === "question" && step.questionType === "input" ? (
+              <label className="bm-number-field">
+                <span>{step.input?.unit ? `Enter ${step.input.unit}` : "Enter value"}</span>
+                <input
+                  inputMode="decimal"
+                  max={step.input?.max}
+                  min={step.input?.min}
+                  onChange={(event) => {
+                    const numericValue = Number(event.target.value);
+                    const nextValue = event.target.value === "" ? null : numericValue;
+                    setAnswer(step, nextValue);
+
+                    if (inputTimerRef.current) {
+                      clearTimeout(inputTimerRef.current);
+                      inputTimerRef.current = null;
+                    }
+
+                    if (
+                      typeof nextValue === "number" &&
+                      !Number.isNaN(nextValue) &&
+                      nextValue >= (step.input?.min ?? Number.NEGATIVE_INFINITY) &&
+                      nextValue <= (step.input?.max ?? Number.POSITIVE_INFINITY)
+                    ) {
+                      scheduleInputAutoAdvance(step, nextValue);
+                    }
+                  }}
+                  placeholder={step.input?.placeholder}
+                  type="number"
+                  value={typeof selectedValue === "number" ? selectedValue : ""}
+                />
+              </label>
+            ) : null}
+
+            {error ? <p className="error-text">{error}</p> : null}
+          </div>
+
+          {hasSideQuestionImage ? (
+            <div className="bm-question-side-image" aria-hidden="true">
+              {renderQuestionImage("side")}
             </div>
           ) : null}
-
-          {step.type === "info" ? (
-            <div className="bm-info-strip">
-              <span>Low-impact training</span>
-              <span>Server-calculated results</span>
-              <span>Progress saved</span>
-            </div>
-          ) : null}
-
-          {step.type === "question" && step.questionType !== "input" ? (
-            <div className={step.questionType === "multi_select" ? "bm-option-grid compact" : "bm-option-grid"}>
-              {step.options.map((option) => {
-                const selected =
-                  step.questionType === "multi_select"
-                    ? Array.isArray(selectedValue) && selectedValue.includes(option.value)
-                    : selectedValue === option.value;
-
-                return (
-                  <button
-                    className={`bm-option-button ${selected ? "selected" : ""}`}
-                    key={option.id}
-                    onClick={() => {
-                      if (step.questionType === "multi_select") {
-                        const current = Array.isArray(selectedValue) ? selectedValue : [];
-                        setAnswer(
-                          step,
-                          current.includes(option.value)
-                            ? current.filter((value) => value !== option.value)
-                            : [...current, option.value]
-                        );
-                      } else {
-                        setAnswer(step, option.value);
-                        void advanceFromCurrentStep(option.value, {
-                          optimistic: true,
-                          feedbackMs: singleSelectFeedbackMs
-                        });
-                      }
-                    }}
-                    disabled={isBusy}
-                    type="button"
-                  >
-                    {option.iconUrl ? (
-                      <span className="bm-option-icon">
-                        <img alt="" src={option.iconUrl} />
-                      </span>
-                    ) : null}
-                    <span>{option.label}</span>
-                    {selected ? <Check size={18} aria-hidden="true" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {step.type === "question" && step.questionType === "input" ? (
-            <label className="bm-number-field">
-              <span>{step.input?.unit ? `Enter ${step.input.unit}` : "Enter value"}</span>
-              <input
-                inputMode="decimal"
-                max={step.input?.max}
-                min={step.input?.min}
-                onChange={(event) => {
-                  const numericValue = Number(event.target.value);
-                  const nextValue = event.target.value === "" ? null : numericValue;
-                  setAnswer(step, nextValue);
-
-                  if (inputTimerRef.current) {
-                    clearTimeout(inputTimerRef.current);
-                    inputTimerRef.current = null;
-                  }
-
-                  if (
-                    typeof nextValue === "number" &&
-                    !Number.isNaN(nextValue) &&
-                    nextValue >= (step.input?.min ?? Number.NEGATIVE_INFINITY) &&
-                    nextValue <= (step.input?.max ?? Number.POSITIVE_INFINITY)
-                  ) {
-                    scheduleInputAutoAdvance(step, nextValue);
-                  }
-                }}
-                placeholder={step.input?.placeholder}
-                type="number"
-                value={typeof selectedValue === "number" ? selectedValue : ""}
-              />
-            </label>
-          ) : null}
-
-          {error ? <p className="error-text">{error}</p> : null}
         </div>
 
         <div className="bm-nav-row">
