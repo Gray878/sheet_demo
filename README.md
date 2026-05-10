@@ -8,7 +8,7 @@
 
 | 交付项 | 地址 / 说明 |
 | --- | --- |
-| 线上演示地址 | https://sheet-demo-six.vercel.app |
+| 线上演示地址 | https://www.clawbot.co/ |
 | GitHub 仓库 | https://github.com/Gray878/sheet_demo |
 | 数据库 Schema 图 | https://cdn.gandalfpuzzle.com/temp/funnel/sheet_demo_er.png |
 | API 文档 | [`docs/api.md`](docs/api.md) |
@@ -25,8 +25,8 @@
 
 | 状态 | sessionId | 结果页 |
 | --- | --- | --- |
-| 未支付 | `1808617f-90bd-4d29-9102-9957efd4d942` | https://sheet-demo-six.vercel.app/result/1808617f-90bd-4d29-9102-9957efd4d942 |
-| 已支付 | `91564939-b953-4b26-9681-dc288ba37c39` | https://sheet-demo-six.vercel.app/result/91564939-b953-4b26-9681-dc288ba37c39 |
+| 未支付 | `1808617f-90bd-4d29-9102-9957efd4d942` | https://www.clawbot.co/result/1808617f-90bd-4d29-9102-9957efd4d942 |
+| 已支付 | `91564939-b953-4b26-9681-dc288ba37c39` | https://www.clawbot.co/result/91564939-b953-4b26-9681-dc288ba37c39 |
 
 未支付 session 的结果接口会返回 `subscriptionStatus: "inactive"` 和 `paywall.required: true`，并隐藏 `recommendedCalories`、`targetDate`、`projectionCurve`。已支付 session 会返回 `subscriptionStatus: "active"`、`paywall.required: false` 和完整结果。
 
@@ -153,7 +153,7 @@ curl -X POST http://localhost:3000/api/pay \
 线上 mock 支付验证：
 
 ```bash
-APP_URL=https://sheet-demo-six.vercel.app
+APP_URL=https://www.clawbot.co
 SESSION_ID=<sessionId>
 
 curl "$APP_URL/api/sessions/$SESSION_ID/result"
@@ -188,7 +188,7 @@ pnpm test
 部署后创建评审用测试 session：
 
 ```bash
-APP_URL=https://sheet-demo-six.vercel.app PAID=true pnpm demo:session
+APP_URL=https://www.clawbot.co PAID=true pnpm demo:session
 ```
 
 ## 交付说明
