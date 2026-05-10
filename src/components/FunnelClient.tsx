@@ -31,6 +31,16 @@ const sessionStorageKey = "health_funnel_session_id";
 const singleSelectFeedbackMs = 135;
 const inputAutoAdvanceMs = 760;
 
+const sensitiveQuestionKeys = new Set(["age", "heightCm", "currentWeightKg", "targetWeightKg", "gender"]);
+
+const progressStages = [
+  { label: "My Profile", maxProgress: 22 },
+  { label: "Goals", maxProgress: 42 },
+  { label: "Body", maxProgress: 62 },
+  { label: "Habits", maxProgress: 86 },
+  { label: "Plan", maxProgress: 100 }
+];
+
 const ageCards = [
   {
     label: "Age: 18-29",
@@ -90,6 +100,36 @@ function BetterMeHeader() {
       </button>
     </header>
   );
+}
+
+function progressStageFor(progress: number) {
+  return progressStages.find((stage) => progress <= stage.maxProgress)?.label ?? progressStages.at(-1)?.label ?? "Plan";
+}
+
+function questionSupportText(step: FunnelStep) {
+  if (step.type !== "question") return null;
+  if (step.questionType === "multi_select") return "Choose every option that feels true right now.";
+  if (step.questionKey && sensitiveQuestionKeys.has(step.questionKey)) {
+    return "Used only to calculate your plan. No account required.";
+  }
+  if (step.questionKey === "goal") return "Your answer shapes the training rhythm and timeline.";
+  if (step.questionKey === "activityFrequency") return "This helps set a realistic starting pace.";
+  return null;
+}
+
+function inputLabelFor(step: FunnelStep) {
+  switch (step.questionKey) {
+    case "age":
+      return "Enter your age";
+    case "heightCm":
+      return "Enter your height";
+    case "currentWeightKg":
+      return "Enter your current weight";
+    case "targetWeightKg":
+      return "Enter your target weight";
+    default:
+      return "Enter value";
+  }
 }
 
 export function FunnelClient() {
@@ -178,12 +218,14 @@ export function FunnelClient() {
 
   const step = funnel?.steps[stepIndex] ?? null;
   const progress = funnel ? Math.round(((stepIndex + 1) / funnel.steps.length) * 100) : 0;
+  const activeProgressStage = progressStageFor(progress);
   const selectedValue = step?.questionKey ? answers[step.questionKey] : undefined;
   const canContinue = step ? hasValue(step, selectedValue) : false;
   const isBusy = isPending || saving;
   const questionMediaUrl = step?.questionImageUrl ?? step?.imageUrl ?? null;
   const questionImageFit = questionMediaUrl ? questionImageFits[questionMediaUrl] : undefined;
   const hasSideQuestionImage = questionImageFit === "is-portrait";
+  const supportText = step ? questionSupportText(step) : null;
 
   const nextLabel = useMemo(() => {
     if (!funnel) return "Continue";
@@ -393,7 +435,12 @@ export function FunnelClient() {
         <BetterMeHeader />
         <section className="bm-first-page" aria-labelledby="landing-title">
           <h1 id="landing-title">PILATES FOR BEGINNERS</h1>
-          <p className="bm-subtitle">SELECT YOUR AGE TO START</p>
+          <p className="bm-subtitle">Build a personalized Pilates plan in about a minute</p>
+          <div className="bm-value-row" aria-label="Assessment benefits">
+            <span>Personal timeline</span>
+            <span>Calorie target</span>
+            <span>No account required</span>
+          </div>
           <p className="bm-quiz-note">1-MINUTE QUIZ</p>
 
           <div className="bm-age-grid">
@@ -448,11 +495,19 @@ export function FunnelClient() {
           <span className="bm-step-count">
             {stepIndex + 1}/{funnel.steps.length}
           </span>
+          <div className="bm-stage-row" aria-label={`Current section: ${activeProgressStage}`}>
+            {progressStages.map((stage) => (
+              <span className={stage.label === activeProgressStage ? "active" : ""} key={stage.label}>
+                {stage.label}
+              </span>
+            ))}
+          </div>
         </div>
 
         <div className={`bm-question-zone ${hasSideQuestionImage ? "with-side-image" : ""}`} key={step.id}>
           <div className="bm-question-content">
             <h1>{step.title}</h1>
+            {supportText ? <p className="bm-question-support">{supportText}</p> : null}
             {step.description ? <p className="lede">{step.description}</p> : null}
 
             {renderQuestionImage("inline")}
@@ -512,34 +567,37 @@ export function FunnelClient() {
 
             {step.type === "question" && step.questionType === "input" ? (
               <label className="bm-number-field">
-                <span>{step.input?.unit ? `Enter ${step.input.unit}` : "Enter value"}</span>
-                <input
-                  inputMode="decimal"
-                  max={step.input?.max}
-                  min={step.input?.min}
-                  onChange={(event) => {
-                    const numericValue = Number(event.target.value);
-                    const nextValue = event.target.value === "" ? null : numericValue;
-                    setAnswer(step, nextValue);
+                <span>{inputLabelFor(step)}</span>
+                <span className="bm-number-input-wrap">
+                  <input
+                    inputMode="decimal"
+                    max={step.input?.max}
+                    min={step.input?.min}
+                    onChange={(event) => {
+                      const numericValue = Number(event.target.value);
+                      const nextValue = event.target.value === "" ? null : numericValue;
+                      setAnswer(step, nextValue);
 
-                    if (inputTimerRef.current) {
-                      clearTimeout(inputTimerRef.current);
-                      inputTimerRef.current = null;
-                    }
+                      if (inputTimerRef.current) {
+                        clearTimeout(inputTimerRef.current);
+                        inputTimerRef.current = null;
+                      }
 
-                    if (
-                      typeof nextValue === "number" &&
-                      !Number.isNaN(nextValue) &&
-                      nextValue >= (step.input?.min ?? Number.NEGATIVE_INFINITY) &&
-                      nextValue <= (step.input?.max ?? Number.POSITIVE_INFINITY)
-                    ) {
-                      scheduleInputAutoAdvance(step, nextValue);
-                    }
-                  }}
-                  placeholder={step.input?.placeholder}
-                  type="number"
-                  value={typeof selectedValue === "number" ? selectedValue : ""}
-                />
+                      if (
+                        typeof nextValue === "number" &&
+                        !Number.isNaN(nextValue) &&
+                        nextValue >= (step.input?.min ?? Number.NEGATIVE_INFINITY) &&
+                        nextValue <= (step.input?.max ?? Number.POSITIVE_INFINITY)
+                      ) {
+                        scheduleInputAutoAdvance(step, nextValue);
+                      }
+                    }}
+                    placeholder={step.input?.placeholder}
+                    type="number"
+                    value={typeof selectedValue === "number" ? selectedValue : ""}
+                  />
+                  {step.input?.unit ? <small>{step.input.unit}</small> : null}
+                </span>
               </label>
             ) : null}
 
