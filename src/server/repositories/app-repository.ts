@@ -31,7 +31,10 @@ export interface AppRepository {
   getResult(sessionId: string): Promise<AssessmentResult | null>;
   activateSubscription(input: {
     sessionId: string;
+    provider?: Payment["provider"];
     providerEventId: string;
+    providerOrderId?: string | null;
+    providerCaptureId?: string | null;
     amountCents: number;
     currency: string;
     rawPayload: unknown;
@@ -187,7 +190,10 @@ class FileRepository implements AppRepository {
 
   async activateSubscription(input: {
     sessionId: string;
+    provider?: Payment["provider"];
     providerEventId: string;
+    providerOrderId?: string | null;
+    providerCaptureId?: string | null;
     amountCents: number;
     currency: string;
     rawPayload: unknown;
@@ -203,10 +209,10 @@ class FileRepository implements AppRepository {
       payment = {
         id: crypto.randomUUID(),
         sessionId: input.sessionId,
-        provider: "mock",
+        provider: input.provider ?? "mock",
         providerEventId: input.providerEventId,
-        providerOrderId: null,
-        providerCaptureId: null,
+        providerOrderId: input.providerOrderId ?? null,
+        providerCaptureId: input.providerCaptureId ?? null,
         status: "succeeded",
         amountCents: input.amountCents,
         currency: input.currency.toUpperCase(),
@@ -215,6 +221,15 @@ class FileRepository implements AppRepository {
         createdAt: timestamp
       };
       db.payments.push(payment);
+    } else {
+      payment.provider = input.provider ?? "mock";
+      payment.providerOrderId = input.providerOrderId ?? null;
+      payment.providerCaptureId = input.providerCaptureId ?? null;
+      payment.status = "succeeded";
+      payment.amountCents = input.amountCents;
+      payment.currency = input.currency.toUpperCase();
+      payment.rawPayload = input.rawPayload;
+      payment.paidAt = timestamp;
     }
 
     session.subscriptionStatus = "active";
@@ -458,7 +473,10 @@ class DrizzleRepository implements AppRepository {
 
   async activateSubscription(input: {
     sessionId: string;
+    provider?: Payment["provider"];
     providerEventId: string;
+    providerOrderId?: string | null;
+    providerCaptureId?: string | null;
     amountCents: number;
     currency: string;
     rawPayload: unknown;
@@ -473,10 +491,10 @@ class DrizzleRepository implements AppRepository {
         .values({
           id: crypto.randomUUID(),
           sessionId: input.sessionId,
-          provider: "mock",
+          provider: input.provider ?? "mock",
           providerEventId: input.providerEventId,
-          providerOrderId: null,
-          providerCaptureId: null,
+          providerOrderId: input.providerOrderId ?? null,
+          providerCaptureId: input.providerCaptureId ?? null,
           status: "succeeded",
           amountCents: input.amountCents,
           currency: input.currency.toUpperCase(),
@@ -487,7 +505,10 @@ class DrizzleRepository implements AppRepository {
         .onConflictDoUpdate({
           target: payments.providerEventId,
           set: {
+            provider: input.provider ?? "mock",
             status: "succeeded",
+            providerOrderId: input.providerOrderId ?? null,
+            providerCaptureId: input.providerCaptureId ?? null,
             amountCents: input.amountCents,
             currency: input.currency.toUpperCase(),
             rawPayload: input.rawPayload,

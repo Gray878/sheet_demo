@@ -1,6 +1,6 @@
 # Bendwell Health Plan
 
-一个健康测评 funnel MVP，用来覆盖全栈挑战里的核心后端闭环：匿名 session、分步保存、进度恢复、服务端计算、结果鉴权和 mock 支付解锁。
+一个健康测评 funnel MVP，用来覆盖全栈挑战里的核心后端闭环：匿名 session、分步保存、进度恢复、服务端计算、结果鉴权和 PayPal/mock 支付解锁。
 
 当前实现优先保证本地可演示。没有 `DATABASE_URL` 时，API 会写入 `data/dev-db.json`；配置 Supabase Postgres 连接串后，服务端会通过 Drizzle 自动切到 PostgreSQL。
 
@@ -19,7 +19,7 @@
 
 ## 线上演示与支付测试
 
-评审可直接打开线上地址，从头完成 funnel，并在结果页点击 `Mock pay` 验证支付解锁闭环。
+评审可直接打开线上地址，从头完成 funnel，并在结果页通过 PayPal 按钮验证真实支付解锁闭环；页面也保留 `Mock pay` 按钮，方便本地脚本和评审快速对照。
 
 对照测试 session：
 
@@ -82,6 +82,11 @@ pnpm db:migrate
 
 ```env
 DATABASE_URL=postgres://...
+PAYPAL_ENV=sandbox
+PAYPAL_CLIENT_ID=...
+PAYPAL_CLIENT_SECRET=...
+PAYPAL_CURRENCY=USD
+PAYPAL_PLAN_AMOUNT_CENTS=1900
 ```
 
 所有数据库读写都在服务端完成，前端不会直接持有 Supabase anon key 或 service role key。Vercel/Supabase pooler 连接建议使用 transaction pooler URI。
@@ -112,7 +117,10 @@ DATABASE_URL=postgres://...
 | `PATCH` | `/api/sessions/:sessionId/answers` | 分步保存答案 |
 | `POST` | `/api/sessions/:sessionId/submit` | 提交测评并生成结果 |
 | `GET` | `/api/sessions/:sessionId/result` | 获取按订阅状态差异化处理的结果 |
-| `POST` | `/api/pay` | mock 支付并激活订阅 |
+| `GET` | `/api/paypal/config` | 获取 PayPal JS SDK 所需的公开配置 |
+| `POST` | `/api/paypal/orders` | 服务端创建 PayPal order |
+| `POST` | `/api/paypal/orders/:orderId/capture` | 服务端 capture PayPal order 并激活订阅 |
+| `POST` | `/api/pay` | mock 支付并激活订阅，供 demo 脚本使用 |
 
 创建 session：
 
@@ -139,7 +147,29 @@ curl -X PATCH http://localhost:3000/api/sessions/<sessionId>/answers \
   }'
 ```
 
-模拟支付：
+PayPal 支付采用前端 JavaScript SDK 按钮 + 服务端 Orders API 的方式：浏览器只拿到公开 client id 并渲染 PayPal Buttons；订单创建、capture、金额校验、session 校验和订阅激活都在服务端完成。
+
+服务端创建 PayPal order：
+
+```bash
+curl -X POST http://localhost:3000/api/paypal/orders \
+  -H "content-type: application/json" \
+  -d '{
+    "sessionId": "<sessionId>"
+  }'
+```
+
+服务端 capture PayPal order：
+
+```bash
+curl -X POST http://localhost:3000/api/paypal/orders/<orderId>/capture \
+  -H "content-type: application/json" \
+  -d '{
+    "sessionId": "<sessionId>"
+  }'
+```
+
+Mock 支付：
 
 ```bash
 curl -X POST http://localhost:3000/api/pay \
@@ -173,7 +203,8 @@ curl "$APP_URL/api/sessions/$SESSION_ID/result"
 ## 关键业务规则
 
 - `assessment_answers` 使用 `unique(session_id, question_key)` 支持答案 upsert。
-- `payments.provider_event_id` 唯一，重复 mock 支付保持幂等。
+- `payments.provider_event_id` 唯一，PayPal capture id 或 mock event id 重复写入时保持幂等。
+- PayPal capture 会在服务端校验金额、币种和 `sessionId` 后才激活订阅。
 - 提交测评前必须具备 `gender`、`goal`、`age`、`heightCm`、`currentWeightKg`、`targetWeightKg`、`activityFrequency`。
 - 未支付结果隐藏 `recommendedCalories`、`targetDate` 和 `projectionCurve`。
 - 支付后再次调用结果接口，返回完整预测曲线和建议。

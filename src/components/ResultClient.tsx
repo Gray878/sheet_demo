@@ -10,7 +10,7 @@ import {
   Unlock
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ApiEnvelope<T> = {
   data: T | null;
@@ -41,10 +41,50 @@ type ResultPayload = {
   };
 };
 
+type PayPalConfig = {
+  clientId: string;
+  currency: string;
+  amountCents: number;
+  amount: string;
+};
+
+type PayPalOrderPayload = {
+  id: string;
+  status: string;
+};
+
+type PayPalButtonInstance = {
+  render: (container: HTMLElement) => Promise<void>;
+  close?: () => Promise<void> | void;
+  isEligible?: () => boolean;
+};
+
+type PayPalButtonsOptions = {
+  style?: {
+    layout?: "horizontal" | "vertical";
+    shape?: "pill" | "rect";
+    label?: "paypal" | "checkout" | "buynow" | "pay" | "installment" | "subscribe" | "donate";
+    height?: number;
+  };
+  createOrder: () => Promise<string>;
+  onApprove: (data: { orderID: string }) => Promise<void>;
+  onCancel?: () => void;
+  onError?: (error: unknown) => void;
+};
+
+declare global {
+  interface Window {
+    paypal?: {
+      Buttons: (options: PayPalButtonsOptions) => PayPalButtonInstance;
+    };
+  }
+}
+
 const profileImageUrl = "https://cdn.gandalfpuzzle.com/temp/funnel/cvvfj4ahkspgm9w8qz70.webp";
 const bmiScaleStart = 15;
 const bmiScaleEnd = 40;
 const bmiMarkers = [15, 18.5, 25, 30, 40];
+let paypalScriptPromise: Promise<void> | null = null;
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -104,10 +144,54 @@ function bodyTypeFor(category: string) {
   return "Low-impact starter";
 }
 
+function loadPayPalScript(config: PayPalConfig) {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.paypal) return Promise.resolve();
+  if (paypalScriptPromise) return paypalScriptPromise;
+
+  paypalScriptPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>("script[data-paypal-sdk]");
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Unable to load PayPal checkout")), {
+        once: true
+      });
+      return;
+    }
+
+    const params = new URLSearchParams({
+      "client-id": config.clientId,
+      currency: config.currency,
+      intent: "capture",
+      components: "buttons",
+      commit: "true"
+    });
+    const script = document.createElement("script");
+    script.src = `https://www.paypal.com/sdk/js?${params.toString()}`;
+    script.async = true;
+    script.dataset.paypalSdk = "true";
+    script.addEventListener("load", () => resolve(), { once: true });
+    script.addEventListener(
+      "error",
+      () => {
+        paypalScriptPromise = null;
+        reject(new Error("Unable to load PayPal checkout"));
+      },
+      { once: true }
+    );
+    document.body.appendChild(script);
+  });
+
+  return paypalScriptPromise;
+}
+
 export function ResultClient({ sessionId }: { sessionId: string }) {
   const [payload, setPayload] = useState<ResultPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [paypalReady, setPaypalReady] = useState(false);
+  const [paypalError, setPaypalError] = useState<string | null>(null);
+  const paypalContainerRef = useRef<HTMLDivElement | null>(null);
 
   async function load() {
     try {
@@ -122,9 +206,85 @@ export function ResultClient({ sessionId }: { sessionId: string }) {
     load();
   }, [sessionId]);
 
-  async function pay() {
+  useEffect(() => {
+    if (!payload?.paywall.required) return;
+
+    let cancelled = false;
+    let buttons: PayPalButtonInstance | null = null;
+
+    async function renderPayPalButtons() {
+      try {
+        setPaypalReady(false);
+        setPaypalError(null);
+        const config = await api<PayPalConfig>("/api/paypal/config");
+        await loadPayPalScript(config);
+
+        if (cancelled || !paypalContainerRef.current || !window.paypal) return;
+        paypalContainerRef.current.innerHTML = "";
+        buttons = window.paypal.Buttons({
+          style: {
+            layout: "vertical",
+            shape: "rect",
+            label: "pay",
+            height: 44
+          },
+          createOrder: async () => {
+            setPaying(true);
+            const order = await api<PayPalOrderPayload>("/api/paypal/orders", {
+              method: "POST",
+              body: JSON.stringify({ sessionId })
+            });
+            return order.id;
+          },
+          onApprove: async (data) => {
+            try {
+              await api(`/api/paypal/orders/${data.orderID}/capture`, {
+                method: "POST",
+                body: JSON.stringify({ sessionId })
+              });
+              await load();
+            } catch (payError) {
+              setPaypalError(payError instanceof Error ? payError.message : "Payment failed");
+            } finally {
+              setPaying(false);
+            }
+          },
+          onCancel: () => {
+            setPaying(false);
+          },
+          onError: (payError) => {
+            console.error(payError);
+            setPaying(false);
+            setPaypalError("PayPal payment failed. Please try again.");
+          }
+        });
+
+        if (buttons.isEligible && !buttons.isEligible()) {
+          throw new Error("PayPal checkout is not available for this browser");
+        }
+
+        await buttons.render(paypalContainerRef.current);
+        if (!cancelled) setPaypalReady(true);
+      } catch (payError) {
+        if (!cancelled) {
+          setPaypalError(payError instanceof Error ? payError.message : "Unable to load PayPal checkout");
+        }
+      }
+    }
+
+    renderPayPalButtons();
+
+    return () => {
+      cancelled = true;
+      if (paypalContainerRef.current) paypalContainerRef.current.innerHTML = "";
+      void buttons?.close?.();
+    };
+  }, [payload?.paywall.required, sessionId]);
+
+  async function mockPay() {
     try {
       setPaying(true);
+      setPaypalError(null);
       await api("/api/pay", {
         method: "POST",
         body: JSON.stringify({
@@ -134,7 +294,7 @@ export function ResultClient({ sessionId }: { sessionId: string }) {
       });
       await load();
     } catch (payError) {
-      setError(payError instanceof Error ? payError.message : "Payment failed");
+      setPaypalError(payError instanceof Error ? payError.message : "Mock payment failed");
     } finally {
       setPaying(false);
     }
@@ -274,10 +434,18 @@ export function ResultClient({ sessionId }: { sessionId: string }) {
               </span>
             </div>
           </div>
-          <button className="primary-button" disabled={paying} onClick={pay} type="button">
-            {paying ? "Unlocking..." : "Unlock full plan"}
-            <Unlock size={18} />
-          </button>
+          <div className="payment-action-stack" aria-live="polite">
+            <div aria-label="PayPal checkout">
+              {!paypalReady && !paypalError ? <p>Loading PayPal checkout...</p> : null}
+              <div ref={paypalContainerRef} />
+            </div>
+            <button className="primary-button" disabled={paying} onClick={mockPay} type="button">
+              {paying ? "Unlocking..." : "Mock pay"}
+              <Unlock size={18} />
+            </button>
+            {paying ? <small>Completing payment...</small> : null}
+            {paypalError ? <small>{paypalError}</small> : null}
+          </div>
         </section>
       </main>
     );

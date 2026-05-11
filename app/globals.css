@@ -1255,6 +1255,26 @@ button:disabled {
   background: #eef1ff;
 }
 
+.payment-action-stack {
+  width: min(360px, 100%);
+  display: grid;
+  gap: 10px;
+  justify-self: end;
+}
+
+.payment-action-stack .primary-button {
+  width: 100%;
+}
+
+.payment-action-stack p,
+.payment-action-stack small {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .unlock-feature-list {
   display: flex;
   flex-wrap: wrap;
@@ -1596,6 +1616,11 @@ button:disabled {
   .profile-unlock-panel {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .payment-action-stack {
+    justify-self: stretch;
+    width: 100%;
   }
 
   .unlock-band {

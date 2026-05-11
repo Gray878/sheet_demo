@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Bendwell Health Plan",
-  description: "A health assessment funnel with server-side results and mock subscription unlock."
+  description: "A health assessment funnel with server-side results and PayPal subscription unlock."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

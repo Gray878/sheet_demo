@@ -23,7 +23,7 @@
 - `assessment_sessions`：记录匿名 session、当前进度、提交状态和订阅状态。
 - `assessment_answers`：按 `session_id + question_key` upsert 保存分步答案。
 - `assessment_results`：保存服务端计算出的 BMI、热量、目标日期和预测曲线。
-- `payments`：保存 mock 支付记录，并预留 PayPal 扩展字段。
+- `payments`：保存 PayPal capture 或 mock 支付记录，并保留 provider order/capture id。
 
 AI 对字段类型、索引和约束给了初步建议，我重点审查了以下部分：
 
@@ -98,7 +98,7 @@ AI 协助生成了计算逻辑的 Vitest 测试。我重点验证：
 - BMI、热量和目标日期是否稳定。
 - 目标 BMI 过低时是否返回风险提示。
 - 未支付和已支付接口返回字段是否有明显差异。
-- `/api/pay` 重复调用不会破坏订阅状态。
+- PayPal capture 完成后会校验金额、币种和 session 绑定，`/api/pay` 重复调用也不会破坏订阅状态。
 
 项目交付前使用以下命令验证：
 
@@ -115,8 +115,7 @@ pnpm build
 AI 在本项目中提高了建模和实现速度，但最终取舍由我完成：
 
 - 没有接入真实账号体系，使用匿名 session 满足挑战重点。
-- 没有接入真实支付，使用 mock `/api/pay` 明确展示订阅状态闭环。
+- 线上结果页接入 PayPal JavaScript SDK，订单创建和 capture 都在服务端完成；mock `/api/pay` 保留给 demo 脚本和快速对照验证。
 - 没有把所有竞品问题全部用于核心算法，而是保留动态问题模型和核心字段计算。
 - 没有让前端承担权限判断，结果脱敏在服务端完成。
 - 增加本地文件存储 fallback，降低本地评审启动成本；线上仍使用 Supabase PostgreSQL。
-

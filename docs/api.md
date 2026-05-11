@@ -134,9 +134,63 @@
 
 ## Payment
 
+### `GET /api/paypal/config`
+
+返回前端加载 PayPal JavaScript SDK 所需的公开配置。`clientId` 本身是公开值；`PAYPAL_CLIENT_SECRET` 不会返回给浏览器。
+
+响应重点：
+
+```json
+{
+  "clientId": "paypal_client_id",
+  "currency": "USD",
+  "amountCents": 1900,
+  "amount": "19.00"
+}
+```
+
+### `POST /api/paypal/orders`
+
+服务端创建 PayPal order。金额、币种、商品描述和 `sessionId` 绑定都由服务端写入 PayPal Orders API，前端不传金额。
+
+请求：
+
+```json
+{
+  "sessionId": "uuid"
+}
+```
+
+响应重点：
+
+```json
+{
+  "id": "PAYPAL_ORDER_ID",
+  "status": "CREATED"
+}
+```
+
+### `POST /api/paypal/orders/:orderId/capture`
+
+服务端 capture PayPal order。capture 成功后，服务端会校验：
+
+- PayPal order 和 capture 状态都是 `COMPLETED`。
+- capture 金额和币种与服务端套餐配置一致。
+- order 中的 `reference_id` 或 `custom_id` 与当前 `sessionId` 一致。
+
+校验通过后写入 `payments`，其中 `provider = "paypal"`、`provider_event_id = captureId`，并将 `assessment_sessions.subscription_status` 更新为 `active`。
+
+请求：
+
+```json
+{
+  "sessionId": "uuid"
+}
+```
+
 ### `POST /api/pay`
 
-Mock 支付接口。写入 `payments` 记录，并将 `assessment_sessions.subscription_status` 更新为 `active`。
+Mock 支付接口。保留给本地脚本和评审对照使用。写入 `payments` 记录，并将 `assessment_sessions.subscription_status` 更新为 `active`。
 
 请求：
 

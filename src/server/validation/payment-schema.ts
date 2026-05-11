@@ -8,3 +8,16 @@ export const paymentSchema = z.object({
 });
 
 export type PaymentInput = z.infer<typeof paymentSchema>;
+
+export const paypalOrderSchema = z.object({
+  sessionId: z.string().uuid()
+});
+
+export const paypalCaptureSchema = z.object({
+  sessionId: z.string().uuid()
+});
+
+export const paypalOrderIdSchema = z.string().min(6).max(80);
+
+export type PayPalOrderInput = z.infer<typeof paypalOrderSchema>;
+export type PayPalCaptureInput = z.infer<typeof paypalCaptureSchema>;
